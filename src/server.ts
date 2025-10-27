@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import 'express-async-errors';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
@@ -8,7 +8,7 @@ import pino from 'pino';
 import pinoHttp from 'pino-http';
 import { exec } from 'child_process';
 
-const app = new (require('express'))();
+const app = express();
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
@@ -22,14 +22,14 @@ const DEV_ADMIN_SECRET = process.env.DEV_ADMIN_SECRET || '7e3b1a9c5d2f';
 const db = new PrismaClient();
 
 // --- health/ready ---
-app.get('/healthz', (_req, res) => res.json({ ok: true, early: true }));
-app.get('/readyz', async (_req, res) => {
+app.get('/healthz', (_req: Request, res: Response) => res.json({ ok: true, early: true }));
+app.get('/readyz', async (_req: Request, res: Response) => {
   try { await db.$queryRaw`SELECT 1`; res.json({ ready: true }); }
-  catch (e:any) { res.status(500).json({ ready: false, error: e?.message }); }
+  catch (e: any) { res.status(500).json({ ready: false, error: e?.message }); }
 });
 
 // --- temp migrate (удалим после смоука) ---
-app.post('/v1/_dev/migrate', (_req, res) => {
+app.post('/v1/_dev/migrate', (_req: Request, res: Response) => {
   exec('npx prisma db push --accept-data-loss', (err, stdout, stderr) => {
     if (err) return res.status(500).json({ error: stderr || String(err) });
     res.json({ ok: true, log: stdout });
@@ -37,20 +37,20 @@ app.post('/v1/_dev/migrate', (_req, res) => {
 });
 
 // --- dev mint ---
-app.post('/v1/_dev/mint', (req, res) => {
+app.post('/v1/_dev/mint', (req: Request, res: Response) => {
   const dev = String(req.headers['x-dev-secret'] || '');
-  if (dev !== DEV_ADMIN_SECRET) return res.status(401).json({ error: 'bad dev secret' });
-  const sub = (req.body?.name ?? 'svc:cli');
+  if (dev !== DEV_ADMIN_SECRET) return res.status(401).json({ title: 'bad dev secret' });
+  const sub = (req.body?.name as string) ?? 'svc:cli';
   const token = jwt.sign({ sub, aud: 'internal', iss: SERVICE_NAME }, SERVICE_JWT_SECRET, { expiresIn: '1h' });
   res.json({ token });
 });
 
-// --- auth middleware ---
-function auth(req: any, res: any, next: any) {
+// --- auth ---
+function auth(req: Request, res: Response, next: NextFunction) {
   const h = String(req.headers.authorization || '');
   const token = h.startsWith('Bearer ') ? h.slice(7) : '';
   try { jwt.verify(token, SERVICE_JWT_SECRET); return next(); }
-  catch { return res.status(401).json({ error: 'unauthorized' }); }
+  catch { return res.status(401).send({ error: 'unauthorized' }); }
 }
 
 // --- routes ---
@@ -61,7 +61,7 @@ const Brief = z.object({
   audience: z.string().optional()
 });
 
-app.post('/v1/write/brief', auth, async (req, res) => {
+app.post('/v1/write/brief', auth, async (req: Request, res: Response) => {
   const p = Brief.parse(req.body);
   const task = await db.writeTask.create({
     data: { tenantId: p.tenantId, brief: p.brief, tone: p.tone, audience: p.audience, status: 'queued' }
@@ -71,18 +71,18 @@ app.post('/v1/write/brief', auth, async (req, res) => {
 
 const Run = z.object({ taskId: z.string().uuid() });
 
-app.post('/v1/write/run', auth, async (req, res) => {
+app.post('/v1/write/run', auth, async (req: Request, res: Response) => {
   const { taskId } = Run.parse(req.body);
-  const task = await db.writeTask.findOne ? null : await db.writeTask.findUnique({ where: { id: taskId } });
+  const task = await db.writeTask.findUnique({ where: { id: taskId } });
   if (!task) return res.status(404).json({ error: 'not found' });
 
   const content =
 `🎯 *${task.brief}*
 ${task.tone ? `Tone: ${task.tone}` : ''} ${task.audience ? `| Audience: ${task.audience}` : ''}
 
-1) Hook: Grab attention with a bold statement.
-2) Value: Explain the benefit of your ${task.brief}.
-3) CTA: Invite the audience to act.
+1) Hook: Grab attention with a bold opener.
+2) Value: Explain the benefit of "${task.brief}" for your audience.
+3) CTA: Invite readers to act.
 
 #marketing #content #${(task.tone || 'brand').replace(/\s+/g,'')}`;
 
@@ -90,14 +90,14 @@ ${task.tone ? `Tone: ${task.tone}` : ''} ${task.audience ? `| Audience: ${task.a
   res.json(updated);
 });
 
-app.get('/v1/write/:id', auth, async (req, res) => {
+app.get('/v1/write/:id', auth, async (req: Request, res: Response) => {
   const t = await db.writeTask.findUnique({ where: { id: req.params.id } });
   if (!t) return res.status(404).json({ error: 'not found' });
   res.json(t);
 });
 
-// --- process guards ---
-process.on('unhandledRejection', e => logger.error({ err: e }, 'unhandledRejection'));
-process.on('uncaughtException', e => logger.error({ err: e }, 'uncaughtException'));
+// guards
+process.on('unhandledRejection', (e) => logger.error({ err: e }, 'unhandledRejection'));
+process.on('uncaughtException', (e) => { logger.error({ err: e }, 'uncaughtException'); });
 
 app.listen(PORT, '0.0.0.0', () => logger.info({ port: PORT, service: SERVICE_NAME }, 'service up'));
