@@ -29,11 +29,6 @@ app.get('/readyz', async (_req: Request, res: Response) => {
 });
 
 // --- temp migrate (удалим после смоука) ---
-app.post('/v1/_dev/migrate', (_req: Request, res: Response) => {
-  exec('npx prisma db push --accept-data-loss', (err, stdout, stderr) => {
-    if (err) return res.status(500).json({ error: stderr || String(err) });
-    res.json({ ok: true, log: stdout });
-  });
 });
 
 // --- dev mint ---
