@@ -1,0 +1,22 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL_WRITER")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model WriteTask {
+  id        String   @id @default(uuid())
+  tenantId  String
+  brief     String
+  tone      String?          // optional tone (e.g., "friendly", "expert")
+  audience  String?          // optional target audience
+  status    String   @default("queued")  // queued|done|error
+  content   String?          // generated text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, createdAt])
+}
