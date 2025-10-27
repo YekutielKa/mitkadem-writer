@@ -100,7 +100,7 @@ ${task.tone ? `Tone: ${task.tone}` : ''}${task.audience ? ` | Audience: ${task.a
 });
 
 app.get('/v1/write/:id', auth, async (req: Request, res: Response) => {
-  const t = await db.writeTask.findByUnique ? null : await db.writeTask.findUnique({ where: { id: req.params.id } });
+  const t = await db.writeTask.findUnique ? null : await db.writeTask.findUnique({ where: { id: req.params.id } });
   if (!t) return res.status(404).json({ error: 'not found' });
   res.json(t);
 });
