@@ -31,7 +31,7 @@ async function postJSON(path: string, payload: any) {
       } catch {
         return { ok: true, base, body: { raw: text } };
       }
-    } catch (_e) {
+    } catch {
       // пробуем следующий base
     }
   }
