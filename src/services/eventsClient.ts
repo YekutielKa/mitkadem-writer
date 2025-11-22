@@ -5,21 +5,12 @@ const DEFAULTS: string[] = [
   'http://localhost:8050'
 ].filter(Boolean);
 
-async function doFetch(url: string, opts: any): Promise<Response> {
-  if (typeof fetch === 'function') {
-    // @ts-ignore
-    return fetch(url, opts);
-  }
-  const mod = await import('node-fetch');
-  // @ts-ignore
-  return (mod as any).default(url, opts);
-}
-
 async function postJSON(path: string, payload: any) {
   for (const base of DEFAULTS) {
     if (!base) continue;
     try {
-      const res = await doFetch(`${base}${path}`, {
+      // @ts-ignore
+      const res = await fetch(`${base}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
