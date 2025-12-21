@@ -58,3 +58,7 @@ Write a social media post about: ${params.brief}`;
   const data = await res.json() as { output: string };
   return data.output;
 }
+
+// Debug: log env on load
+console.log('LLM_HUB_URL:', LLM_HUB_URL);
+console.log('SERVICE_JWT_SECRET exists:', !!SERVICE_JWT_SECRET && SERVICE_JWT_SECRET !== 'dev-service-123');
