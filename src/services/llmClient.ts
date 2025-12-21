@@ -32,18 +32,19 @@ Rules:
 - Add 3-5 relevant hashtags`;
 
   const token = mintLlmToken();
+  const url = LLM_HUB_URL + '/v1/llm/generate';
 
-  const res = await fetch(`${LLM_HUB_URL}/v1/llm/generate`, {
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
+      'Authorization': 'Bearer ' + token
     },
     body: JSON.stringify({
       provider: 'anthropic',
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Write a social media post about: ${params.brief}` }
+        { role: 'user', content: 'Write a social media post about: ' + params.brief }
       ],
       max_tokens: 500,
       temperature: 0.7
@@ -52,7 +53,7 @@ Rules:
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).error || `LLM generation failed: ${res.status}`);
+    throw new Error((err as any).error || 'LLM generation failed: ' + res.status);
   }
 
   const data = await res.json() as { text: string };
