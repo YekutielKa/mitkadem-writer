@@ -1,11 +1,22 @@
+import jwt from 'jsonwebtoken';
+
 const LLM_HUB_URL = process.env.LLM_HUB_URL || 'https://mitkadem-llm-hub-production.up.railway.app';
+const SERVICE_JWT_SECRET = process.env.SERVICE_JWT_SECRET || 'dev-service-123';
+
+function mintLlmToken(): string {
+  return jwt.sign(
+    { sub: 'svc:writer', aud: 'internal', iss: 'mitkadem' },
+    SERVICE_JWT_SECRET,
+    { expiresIn: '5m' }
+  );
+}
 
 export async function generateContent(params: {
   brief: string;
   tone?: string;
   audience?: string;
   platform?: string;
-  serviceJwt: string;
+  serviceJwt?: string;
 }): Promise<string> {
   const systemPrompt = `You are an expert social media copywriter.
 Write engaging posts that drive engagement.
@@ -20,11 +31,13 @@ Rules:
 - End with a call-to-action
 - Add 3-5 relevant hashtags`;
 
+  const token = mintLlmToken();
+
   const res = await fetch(`${LLM_HUB_URL}/v1/llm/generate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${params.serviceJwt}`
+      'Authorization': `Bearer ${token}`
     },
     body: JSON.stringify({
       provider: 'anthropic',
