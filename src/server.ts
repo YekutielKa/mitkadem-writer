@@ -7,6 +7,7 @@ import { z } from 'zod';
 import pino from 'pino';
 import pinoHttp from 'pino-http';
 import { logEvent } from './services/eventsClient';
+import { generateContent } from './services/llmClient';
 
 const app = express();
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
@@ -65,7 +66,8 @@ const Brief = z.object({
   tenantId: z.string().uuid(),
   brief: z.string().min(5),
   tone: z.string().optional(),
-  audience: z.string().optional()
+  audience: z.string().optional(),
+  platform: z.string().optional()
 });
 
 const Run = z.object({ taskId: z.string().uuid() });
@@ -90,7 +92,11 @@ app.post('/v1/write/run', auth, async (req: Request, res: Response) => {
   const task = await db.writeTask.findUnique({ where: { id: taskId } });
   if (!task) return res.status(404).json({ error: 'not found' });
 
-  // логируем старт работы writer'а
+  // Get JWT from request for llm-hub
+  const authHeader = req.headers.authorization || '';
+  const serviceJwt = authHeader.replace('Bearer ', '');
+
+  // Log start
   try {
     logEvent({
       tenantId: task.tenantId,
@@ -107,23 +113,26 @@ app.post('/v1/write/run', auth, async (req: Request, res: Response) => {
     }).catch(() => {});
   } catch {}
 
-  const content = `🎯 *${task.brief}*
-${task.tone ? `Tone: ${task.tone}` : ''}${
-    task.audience ? ` | Audience: ${task.audience}` : ''
+  // REAL LLM generation!
+  let content: string;
+  try {
+    content = await generateContent({
+      brief: task.brief,
+      tone: task.tone || undefined,
+      audience: task.audience || undefined,
+      serviceJwt
+    });
+  } catch (err: any) {
+    logger.error({ err, taskId }, 'LLM generation failed');
+    return res.status(500).json({ error: 'llm_generation_failed', details: err?.message });
   }
-
-1) Hook — grab attention with a bold opener.
-2) Value — explain the benefit of “${task.brief}”.
-3) CTA — invite readers to act.
-
-#marketing #content #${(task.tone || 'brand').replace(/\s+/g, '')}`;
 
   const updated = await db.writeTask.update({
     where: { id: task.id },
     data: { status: 'done', content }
   });
 
-  // логируем завершение
+  // Log completion
   try {
     logEvent({
       tenantId: updated.tenantId,

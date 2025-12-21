@@ -9,7 +9,6 @@ async function postJSON(path: string, payload: any) {
   for (const base of DEFAULTS) {
     if (!base) continue;
     try {
-      // @ts-ignore
       const res = await fetch(`${base}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -23,7 +22,7 @@ async function postJSON(path: string, payload: any) {
         return { ok: true, base, body: { raw: text } };
       }
     } catch {
-      // пробуем следующий base
+      // try next base
     }
   }
   return { ok: false };
