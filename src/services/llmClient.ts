@@ -16,20 +16,21 @@ export async function generateContent(params: {
   tone?: string;
   audience?: string;
   platform?: string;
-  serviceJwt?: string;
 }): Promise<string> {
-  const systemPrompt = `You are an expert social media copywriter.
+  const prompt = `You are an expert social media copywriter.
 Write engaging posts that drive engagement.
 Language: Match the language of the brief (Hebrew/Russian/English).
-${params.tone ? `Tone: ${params.tone}` : ''}
-${params.audience ? `Target audience: ${params.audience}` : ''}
-${params.platform ? `Platform: ${params.platform} (adjust length and style)` : ''}
+${params.tone ? 'Tone: ' + params.tone : ''}
+${params.audience ? 'Target audience: ' + params.audience : ''}
+${params.platform ? 'Platform: ' + params.platform + ' (adjust length and style)' : ''}
 
 Rules:
 - Be concise and punchy
 - Include relevant emojis
 - End with a call-to-action
-- Add 3-5 relevant hashtags`;
+- Add 3-5 relevant hashtags
+
+Write a social media post about: ${params.brief}`;
 
   const token = mintLlmToken();
   const url = LLM_HUB_URL + '/v1/llm/generate';
@@ -42,20 +43,18 @@ Rules:
     },
     body: JSON.stringify({
       provider: 'anthropic',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: 'Write a social media post about: ' + params.brief }
-      ],
+      model: 'claude-sonnet-4-20250514',
+      input: prompt,
       max_tokens: 500,
       temperature: 0.7
     })
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
+    const err = await res.json().catch(function() { return {}; });
     throw new Error((err as any).error || 'LLM generation failed: ' + res.status);
   }
 
-  const data = await res.json() as { text: string };
-  return data.text;
+  const data = await res.json() as { output: string };
+  return data.output;
 }

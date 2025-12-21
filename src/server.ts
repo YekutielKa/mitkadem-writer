@@ -94,7 +94,6 @@ app.post('/v1/write/run', auth, async (req: Request, res: Response) => {
 
   // Get JWT from request for llm-hub
   const authHeader = req.headers.authorization || '';
-  const serviceJwt = authHeader.replace('Bearer ', '');
 
   // Log start
   try {
@@ -120,7 +119,7 @@ app.post('/v1/write/run', auth, async (req: Request, res: Response) => {
       brief: task.brief,
       tone: task.tone || undefined,
       audience: task.audience || undefined,
-      serviceJwt
+      // serviceJwt removed
     });
   } catch (err: any) {
     logger.error({ err, taskId }, 'LLM generation failed');
