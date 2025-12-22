@@ -8,6 +8,7 @@ import pino from 'pino';
 import pinoHttp from 'pino-http';
 import { logEvent } from './services/eventsClient';
 import { generateContent } from './services/llmClient';
+import { addToQueue } from './services/queueClient';
 
 const app = express();
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
@@ -84,7 +85,12 @@ app.post('/v1/write/brief', auth, async (req: Request, res: Response) => {
       status: 'queued'
     }
   });
-  res.status(201).json(task);
+  const jobId = await addToQueue('writer', task.id, task.tenantId);
+  if (jobId) {
+    res.status(202).json({ ...task, async: true, jobId });
+  } else {
+    res.status(201).json(task);
+  }
 });
 
 app.post('/v1/write/run', auth, async (req: Request, res: Response) => {
