@@ -119,9 +119,9 @@ app.post('/v1/write/run', auth, async (req: Request, res: Response) => {
   } catch {}
 
   // REAL LLM generation!
-  let content: string;
+  let result: { content: string; hashtags: string[]; image_prompt: string };
   try {
-    content = await generateContent({
+    result = await generateContent({
       brief: task.brief,
       tone: task.tone || undefined,
       audience: task.audience || undefined,
@@ -134,7 +134,7 @@ app.post('/v1/write/run', auth, async (req: Request, res: Response) => {
 
   const updated = await db.writeTask.update({
     where: { id: task.id },
-    data: { status: 'done', content }
+    data: { status: 'done', content: result.content }
   });
 
   // Log completion
@@ -152,7 +152,7 @@ app.post('/v1/write/run', auth, async (req: Request, res: Response) => {
     }).catch(() => {});
   } catch {}
 
-  res.json(updated);
+  res.json({ ...updated, image_prompt: result.image_prompt, hashtags: result.hashtags });
 });
 
 app.get('/v1/write/:id', auth, async (req: Request, res: Response) => {

@@ -11,51 +11,30 @@ function mintLlmToken(): string {
   );
 }
 
-export interface GeneratedPost {
-  content: string;
-  hashtags: string[];
-  image_prompt: string;
-}
-
 export async function generateContent(params: {
   brief: string;
   tone?: string;
   audience?: string;
   platform?: string;
-  image_brief?: string;
-}): Promise<GeneratedPost> {
+}): Promise<string> {
   const prompt = `You are an expert social media copywriter.
 Write engaging posts that drive engagement.
-
 Language: Match the language of the brief (Hebrew/Russian/English).
 ${params.tone ? 'Tone: ' + params.tone : ''}
 ${params.audience ? 'Target audience: ' + params.audience : ''}
 ${params.platform ? 'Platform: ' + params.platform + ' (adjust length and style)' : ''}
-${params.image_brief ? 'Image context: ' + params.image_brief : ''}
 
 Rules:
 - Be concise and punchy
 - Include relevant emojis
 - End with a call-to-action
-
-Return ONLY valid JSON with this structure:
-{
-  "content": "The post text with emojis",
-  "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
-  "image_prompt": "Detailed English prompt for AI image generation. Include: style, colors, composition, lighting, mood. Format: professional photography/illustration style description."
-}
-
-The image_prompt must be:
-- In ENGLISH only
-- Detailed (style, colors, composition, lighting)
-- Suitable for AI image generation (Midjourney/DALL-E style)
-- Related to the post content
+- Add 3-5 relevant hashtags
 
 Write a social media post about: ${params.brief}`;
 
   const token = mintLlmToken();
   const url = LLM_HUB_URL + '/v1/llm/generate';
-  
+
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -66,29 +45,17 @@ Write a social media post about: ${params.brief}`;
       provider: 'anthropic',
       model: 'claude-sonnet-4-20250514',
       input: prompt,
-      max_tokens: 800,
+      max_tokens: 500,
       temperature: 0.7
     })
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
+    const err = await res.json().catch(function() { return {}; });
     throw new Error((err as any).error || 'LLM generation failed: ' + res.status);
   }
 
   const data = await res.json() as { output: string };
-  const output = data.output || '';
-  
-  // Parse JSON from response
-  const jsonMatch = output.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    // Fallback: return content as-is if JSON parsing fails
-    return {
-      content: output,
-      hashtags: [],
-      image_prompt: ''
-    };
-  }
-  
-  return JSON.parse(jsonMatch[0]);
+  return data.output;
 }
+
