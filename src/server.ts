@@ -122,6 +122,7 @@ app.post('/v1/write/run', auth, async (req: Request, res: Response) => {
   let result: { content: string; hashtags: string[]; image_prompt: string };
   try {
     result = await generateContent({
+      tenantId: task.tenantId,
       brief: task.brief,
       tone: task.tone || undefined,
       audience: task.audience || undefined,
