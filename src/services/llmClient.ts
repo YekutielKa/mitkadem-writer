@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 
 const LLM_HUB_URL = process.env.LLM_HUB_URL || 'https://mitkadem-llm-hub-production.up.railway.app';
 const TENANT_BRAIN_URL = process.env.TENANT_BRAIN_URL || 'https://mitkadem-tenant-brain-production.up.railway.app';
-const SERVICE_JWT_SECRET = process.env.SERVICE_JWT_SECRET || 'dev-service-123';
+const SERVICE_JWT_SECRET = process.env.SERVICE_JWT_SECRET!;
 
 function mintLlmToken(): string {
   return jwt.sign(

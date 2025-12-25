@@ -18,8 +18,8 @@ app.use(pinoHttp({ logger }));
 
 const PORT = parseInt(process.env.PORT || '8800', 10) || 8080;
 const SERVICE_NAME = process.env.SERVICE_NAME || 'mitkadem-writer';
-const SERVICE_JWT_SECRET = process.env.SERVICE_JWT_SECRET || '';
-const DEV_ADMIN_SECRET = process.env.DEV_ADMIN_SECRET || '7e3b1a9c5d2f';
+const SERVICE_JWT_SECRET = process.env.SERVICE_JWT_SECRET!;
+const DEV_ADMIN_SECRET = process.env.DEV_ADMIN_SECRET || '';
 
 const db = new (class extends PrismaClient {})();
 
