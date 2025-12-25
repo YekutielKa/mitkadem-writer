@@ -163,7 +163,7 @@ app.post('/v1/write/run', auth, async (req: Request, res: Response) => {
       brief: task.brief,
       tone: hints.tone || task.tone || undefined,
       audience: task.audience || undefined,
-      // hints passed via tone
+      hints: hints // Pass hints to LLM client
     });
   } catch (err: any) {
     logger.error({ err, taskId }, 'LLM generation failed');
