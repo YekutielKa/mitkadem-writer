@@ -57,7 +57,7 @@ function auth(req, res, next) {
 }
 // --- schemas ---
 const Brief = zod_1.z.object({
-    tenantId: zod_1.z.string().uuid(),
+    tenantId: zod_1.z.string().min(1),
     brief: zod_1.z.string().min(5),
     tone: zod_1.z.string().optional(),
     audience: zod_1.z.string().optional()
