@@ -74,7 +74,7 @@ function auth(req: Request, res: Response, next: NextFunction) {
 
 // --- schemas ---
 const Brief = z.object({
-  tenantId: z.string().uuid(),
+  tenantId: z.string().min(1),
   brief: z.string().min(5),
   tone: z.string().optional(),
   audience: z.string().optional(),
@@ -84,7 +84,7 @@ const Brief = z.object({
 const Run = z.object({ taskId: z.string().uuid() });
 
 const FeedbackSchema = z.object({
-  tenantId: z.string().uuid(),
+  tenantId: z.string().min(1),
   contentId: z.string().min(1),
   feedbackType: z.enum(['approved', 'edited', 'rejected', 'published']),
   score: z.number().min(1).max(5).optional(),
