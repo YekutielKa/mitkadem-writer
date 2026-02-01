@@ -1,19 +1,19 @@
 {
   "name": "mitkadem-writer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "dev": "nodemon --quiet --watch src --ext ts --exec ts-node src/server.ts",
+    "dev": "nodemon --quiet --watch src --ext ts --exec ts-node src/index.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "bullmq": "^5.66.2",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-async-errors": "^3.1.1",
     "ioredis": "^5.8.2",

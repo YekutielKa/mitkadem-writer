@@ -11,10 +11,10 @@ model WriteTask {
   id        String   @id @default(uuid())
   tenantId  String
   brief     String
-  tone      String?          // optional tone (e.g., "friendly", "expert")
-  audience  String?          // optional target audience
-  status    String   @default("queued")  // queued|done|error
-  content   String?          // generated text
+  tone      String?
+  audience  String?
+  status    String   @default("queued")
+  content   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
