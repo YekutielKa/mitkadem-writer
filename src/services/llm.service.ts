@@ -137,9 +137,13 @@ Write a social media post about: ${params.brief}`;
     {
       provider: 'anthropic',
       model: 'claude-sonnet-4-20250514',
-      input: prompt,
-      max_tokens: 800,
-      temperature: 0.7,
+      input: {
+        messages: [{ role: 'user', content: prompt }],
+        system: systemPrompt,
+        max_tokens: 800,
+        temperature: 0.7,
+      },
+
     },
     {
       Authorization: `Bearer ${signServiceToken()}`,
