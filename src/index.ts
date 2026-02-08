@@ -2,12 +2,14 @@ import { getEnv } from './config/env';
 import { logger } from './lib/logger';
 import { disconnectPrisma } from './lib/prisma';
 import { closeQueue } from './services/queue.service';
+import { startWorker, closeWorker } from './services/worker.service';
 import app from './app';
 
 const env = getEnv();
 
 const server = app.listen(env.PORT, '0.0.0.0', () => {
   logger.info({ port: env.PORT, service: env.SERVICE_NAME, version: '0.2.0' }, 'Service started');
+  startWorker();
 });
 
 // Graceful shutdown
@@ -18,6 +20,7 @@ async function shutdown(signal: string) {
     logger.info('HTTP server closed');
 
     try {
+      await closeWorker();
       await closeQueue();
       await disconnectPrisma();
       logger.info('Cleanup complete');
