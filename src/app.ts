@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import pinoHttp from 'pino-http';
 import 'express-async-errors';
 
@@ -16,6 +17,7 @@ const app = express();
 
 // Middleware
 app.use(cors());
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false }));
 app.use(express.json({ limit: '1mb' }));
 app.use(pinoHttp({ logger }));
 app.use(requestIdMiddleware);
