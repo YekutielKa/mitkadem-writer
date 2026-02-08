@@ -1,3 +1,4 @@
+import { signServiceToken } from '../lib/jwt';
 import { getEnv } from '../config/env';
 import { logger } from '../lib/logger';
 
@@ -20,7 +21,7 @@ export async function logEvent(payload: EventPayload): Promise<void> {
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${signServiceToken()}` },
       body: JSON.stringify(payload),
     });
 
@@ -42,7 +43,7 @@ export async function applyReward(payload: Record<string, unknown>): Promise<voi
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${signServiceToken()}` },
       body: JSON.stringify(payload),
     });
 
