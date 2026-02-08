@@ -91,14 +91,14 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
   // Update task
   const updated = await db.writeTask.update({
     where: { id: task.id },
-    data: { status: 'done', content: result.content },
+    data: { status: 'pending_approval', content: result.content },
   });
 
   // Log completion event
   logEvent({
     tenantId: updated.tenantId,
     workflowId: null,
-    eventType: 'agent.writer.run.done',
+    eventType: 'agent.writer.run.pending_approval',
     source: 'writer',
     value: 1,
     meta: {
