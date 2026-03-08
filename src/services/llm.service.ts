@@ -135,8 +135,7 @@ Write a social media post about: ${params.brief}`;
   const data = await httpPost<LLMResponse>(
     url,
     {
-      provider: 'anthropic',
-      model: 'claude-sonnet-4-20250514',
+      intent: 'quality',
       input: {
         messages: [{ role: 'user', content: prompt }],
         system: systemPrompt,
