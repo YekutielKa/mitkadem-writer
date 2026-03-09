@@ -105,24 +105,74 @@ ${params.audience ? 'Target audience override: ' + params.audience : ''}
 ${params.platform ? 'Platform: ' + params.platform + ' (adjust length and style)' : ''}
 ${params.image_brief ? 'Image context: ' + params.image_brief : ''}
 
-Rules:
+=== ПРАВИЛА ТЕКСТА (PREMIUM COPYWRITING) ===
+
+ПЕРВАЯ СТРОКА — это 80% успеха поста. Она должна ОСТАНОВИТЬ скролл.
+Техники для первой строки:
+- Интрига: "Она пришла с ногтями после другого мастера... и я всё поняла"
+- Вопрос-боль: "Маникюр облезает через неделю? Знакомо?"
+- Провокация: "Хватит переплачивать за маникюр который не держится"
+- Факт: "3-4 недели без сколов. Не обещание — стандарт"
+- Эмоция: "Когда клиентка присылает фото через 3 недели 🤍"
+
+НЕ ИСПОЛЬЗУЙ банальные первые строки:
+- ❌ "Хотите красивый маникюр?"
+- ❌ "Милые девочки..."
+- ❌ "Вам нравится..."
+
+СТРУКТУРА ПОСТА:
+1. Hook (первая строка) — останавливает скролл
+2. Развитие — боль/решение/история (2-3 предложения)
+3. Конкретика — цена/время/результат
+4. CTA — чёткий призыв к действию
+5. Хэштеги — 5-10 штук
+
+СТИЛЬ:
 - Match the language of the brief (Hebrew/Russian/English)
-- Be concise and punchy
-- Include relevant emojis
-- End with a call-to-action
+- Короткие абзацы, 1-2 предложения каждый
+- Эмодзи умеренно (2-3 на пост)
+- Прямота и конкретика, не лей воду
+- НИКОГДА не используй слово "ахла"
+- Пиши как подруга-профи, не как рекламный буклет
+
+=== ПРАВИЛА IMAGE_PROMPT (CRITICAL — GEMINI/IMAGEN) ===
+
+image_prompt — это промпт для AI-генерации фотореалистичного изображения.
+Промпт ДОЛЖЕН быть детально проработан. AI генерирует красиво, но тупой — ему надо всё разжевать.
+
+ОБЯЗАТЕЛЬНЫЕ ЭЛЕМЕНТЫ КАЖДОГО ПРОМПТА:
+1. "Photorealistic" — ВСЕГДА первое слово
+2. АНАТОМИЯ РУК: "exactly ONE left hand and ONE right hand, each with exactly 5 fingers, natural hand anatomy, realistic finger proportions"
+3. ЛОГИКА СЦЕНЫ: описывай как реальный фотограф — что где стоит, откуда свет, что видит камера. Кактус рядом с кофе = нелогично. Продумай каждый предмет.
+4. "CRITICAL: NO text, NO letters, NO words, NO logos, NO watermarks, NO brand names on the image"
+5. КОНКРЕТНЫЕ ЦВЕТА: не "красивый цвет", а "dusty rose", "deep burgundy", "soft lavender"
+6. ОСВЕЩЕНИЕ: "soft natural daylight from window" или "warm studio lighting with ring light"
+7. КАМЕРА: "Shot on 85mm lens, shallow depth of field" или "overhead flat-lay, even lighting"
+8. ФОРМАТ: "square 1080x1080, Instagram-optimized"
+9. "Mediterranean warm tone color palette" — для Израиля
+
+РАЗНООБРАЗИЕ СЦЕН (КРИТИЧНО — не повторять одно и то же!):
+- Крупный план ногтей на мраморной поверхности с кофе
+- Руки с маникюром держат букет цветов
+- Процесс нанесения гель-лака (мастер в чёрных перчатках)
+- Рабочее место мастера (белый стол, ring light, инструменты)
+- Lifestyle: руки на руле авто, с сумочкой, с бокалом
+- Детали: стразы крупным планом, градиент, French
+- Сезонные: осенние листья + тёплые тона, весенние цветы + пастель
+
+ЗАПРЕЩЕНО В ПРОМПТАХ:
+- Несколько пар рук (если не процесс работы мастер+клиент)
+- Нелогичные сочетания предметов
+- Нереалистичные позы пальцев
+- Текст на изображении (ни на каком языке)
+- Фон который отвлекает от ногтей
 
 Return ONLY valid JSON with this structure:
 {
-  "content": "The post text with emojis",
+  "content": "The post text with emojis, hook first line, CTA at the end",
   "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
-  "image_prompt": "Detailed English prompt for AI image generation. Include: style, colors, composition, lighting, mood. Format: professional photography/illustration style description."
+  "image_prompt": "Photorealistic... [full detailed prompt following ALL rules above]"
 }
-
-The image_prompt must be:
-- In ENGLISH only
-- Detailed (style, colors, composition, lighting)
-- Suitable for AI image generation (Midjourney/DALL-E style)
-- Related to the post content
 
 Write a social media post about: ${params.brief}`;
 
@@ -139,15 +189,15 @@ Write a social media post about: ${params.brief}`;
       input: {
         messages: [{ role: 'user', content: prompt }],
         system: systemPrompt,
-        max_tokens: 800,
-        temperature: 0.7,
+        max_tokens: 1200,
+        temperature: 0.8,
       },
 
     },
     {
       Authorization: `Bearer ${signServiceToken()}`,
     },
-    { timeout: 60000 } // LLM может быть медленным
+    { timeout: 60000 }
   );
 
   const output = data.output || '';
@@ -155,7 +205,6 @@ Write a social media post about: ${params.brief}`;
   // Parse JSON from response
   const jsonMatch = output.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    // Fallback: return content as-is if JSON parsing fails
     return {
       content: output,
       hashtags: [],
