@@ -1,3 +1,4 @@
+import { getWriterKnowledge } from '../knowledge/writer-knowledge';
 import { getEnv } from '../config/env';
 import { signServiceToken } from '../lib/jwt';
 import { httpPost, httpGet } from '../lib/http';
@@ -26,13 +27,25 @@ export async function loadBrandProfile(tenantId: string): Promise<BrandProfile |
  * Строит персонализированный system prompt на основе brand profile
  */
 function buildSystemPrompt(profile: BrandProfile | null): string {
+  // Load writer expertise knowledge base
+  const writerKnowledge = getWriterKnowledge();
+
   if (!profile) {
-    return 'You are an expert social media copywriter.\nWrite engaging posts that drive engagement.';
+    return writerKnowledge
+      ? `You are an expert beauty Instagram copywriter.\n\n=== COPYWRITING KNOWLEDGE BASE ===\n${writerKnowledge.slice(0, 4000)}\n=== END KNOWLEDGE ===\n\nWrite engaging posts that drive bookings.`
+      : 'You are an expert social media copywriter.\nWrite engaging posts that drive engagement.';
   }
 
   const parts: string[] = [
-    `You are a professional SMM copywriter for a ${profile.businessType} business.`,
+    `You are a professional beauty Instagram copywriter for a ${profile.businessType} business.`,
   ];
+
+  // Inject knowledge base
+  if (writerKnowledge) {
+    parts.push('\n=== COPYWRITING EXPERTISE (follow these rules and patterns) ===');
+    parts.push(writerKnowledge.slice(0, 4000));
+    parts.push('=== END EXPERTISE ===\n');
+  }
 
   if (profile.businessName) {
     parts.push(`Business name: "${profile.businessName}"`);

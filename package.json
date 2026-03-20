@@ -5,7 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "nodemon --quiet --watch src --ext ts --exec ts-node src/index.ts",
-    "build": "tsc",
+    "build": "tsc && mkdir -p dist/knowledge && cp src/knowledge/*.md dist/knowledge/",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate"
