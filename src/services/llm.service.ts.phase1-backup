@@ -37,7 +37,7 @@ function buildSystemPrompt(profile: BrandProfile | null): string {
   }
 
   const parts: string[] = [
-    `You are a professional Instagram copywriter for a ${profile.businessType} business.`,
+    `You are a professional beauty Instagram copywriter for a ${profile.businessType} business.`,
   ];
 
   // Inject knowledge base
@@ -52,7 +52,7 @@ function buildSystemPrompt(profile: BrandProfile | null): string {
   }
 
   if (profile.city || profile.country) {
-    parts.push(`Location: ${[profile.city, profile.country].filter(Boolean).join(', ')}`);
+    parts.push(`Location: ${profile.city || ''}, ${profile.country || 'Israel'}`);
   }
 
   if (profile.languages?.length) {
@@ -111,10 +111,6 @@ export async function generateContent(params: GenerateParams): Promise<Generated
 
   const systemPrompt = buildSystemPrompt(profile);
 
-  // Tenant-specific variables for prompt universalization
-  const nicheLabel = profile?.businessType || 'beauty';
-  const ownerRole = 'мастер';
-
   const prompt = `${systemPrompt}
 
 ${params.tone ? 'Requested tone: ' + params.tone : ''}
@@ -127,13 +123,13 @@ ${params.image_brief ? 'Image context: ' + params.image_brief : ''}
 ПЕРВАЯ СТРОКА — это 80% успеха поста. Она должна ОСТАНОВИТЬ скролл.
 Техники для первой строки:
 - Интрига: "Она пришла с ногтями после другого мастера... и я всё поняла"
-- Вопрос-боль: "${nicheLabel} не держится? Знакомо?"
-- Провокация: "Хватит переплачивать за ${nicheLabel} который не держится"
+- Вопрос-боль: "Маникюр облезает через неделю? Знакомо?"
+- Провокация: "Хватит переплачивать за маникюр который не держится"
 - Факт: "3-4 недели без сколов. Не обещание — стандарт"
 - Эмоция: "Когда клиентка присылает фото через 3 недели 🤍"
 
 НЕ ИСПОЛЬЗУЙ банальные первые строки:
-- ❌ "Хотите красивый ${nicheLabel}?"
+- ❌ "Хотите красивый маникюр?"
 - ❌ "Милые девочки..."
 - ❌ "Вам нравится..."
 
@@ -166,12 +162,12 @@ image_prompt — это промпт для AI-генерации фотореа
 6. ОСВЕЩЕНИЕ: "soft natural daylight from window" или "warm studio lighting with ring light"
 7. КАМЕРА: "Shot on 85mm lens, shallow depth of field" или "overhead flat-lay, even lighting"
 8. ФОРМАТ: "square 1080x1080, Instagram-optimized"
-9. "Mediterranean warm tone color palette"
+9. "Mediterranean warm tone color palette" — для Израиля
 
 РАЗНООБРАЗИЕ СЦЕН (КРИТИЧНО — не повторять одно и то же!):
 - Крупный план ногтей на мраморной поверхности с кофе
 - Руки с маникюром держат букет цветов
-- Процесс работы (${ownerRole} в чёрных перчатках)
+- Процесс нанесения гель-лака (мастер в чёрных перчатках)
 - Рабочее место мастера (белый стол, ring light, инструменты)
 - Lifestyle: руки на руле авто, с сумочкой, с бокалом
 - Детали: стразы крупным планом, градиент, French
