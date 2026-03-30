@@ -32,7 +32,7 @@ function buildSystemPrompt(profile: BrandProfile | null): string {
 
   if (!profile) {
     return writerKnowledge
-      ? `You are an expert beauty Instagram copywriter.\n\n=== COPYWRITING KNOWLEDGE BASE ===\n${writerKnowledge.slice(0, 4000)}\n=== END KNOWLEDGE ===\n\nWrite engaging posts that drive bookings.`
+      ? `You are an expert social media copywriter specializing in service businesses.\n\n=== COPYWRITING KNOWLEDGE BASE ===\n${writerKnowledge.slice(0, 4000)}\n=== END KNOWLEDGE ===\n\nWrite engaging posts that drive bookings.`
       : 'You are an expert social media copywriter.\nWrite engaging posts that drive engagement.';
   }
 
@@ -112,7 +112,7 @@ export async function generateContent(params: GenerateParams): Promise<Generated
   const systemPrompt = buildSystemPrompt(profile);
 
   // Tenant-specific variables for prompt universalization
-  const nicheLabel = profile?.businessType || 'beauty';
+  const nicheLabel = profile?.businessType || 'specialist';
   const ownerRole = 'мастер';
 
   const prompt = `${systemPrompt}
