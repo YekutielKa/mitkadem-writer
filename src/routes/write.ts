@@ -25,6 +25,25 @@ router.post('/brief', authMiddleware, async (req: Request, res: Response) => {
     },
   });
 
+  // premium-01/task4d: persist arm fields via raw SQL (Prisma model not regenerated)
+  if (input.styleArm || input.topicArm || input.constraintsOverride) {
+    try {
+      await db.$executeRawUnsafe(
+        `UPDATE "WriteTask"
+            SET "styleArm" = $1,
+                "topicArm" = $2,
+                "constraints" = $3::jsonb
+          WHERE id = $4`,
+        input.styleArm ?? null,
+        input.topicArm ?? null,
+        input.constraintsOverride ? JSON.stringify(input.constraintsOverride) : null,
+        task.id,
+      );
+    } catch (e: any) {
+      logger.warn({ taskId: task.id, error: e?.message }, '[task4d] failed to persist arm fields (non-blocking)');
+    }
+  }
+
   // Try to add to queue
   const jobId = await addToQueue(task.id, task.tenantId);
 
@@ -44,6 +63,22 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
   if (!task) {
     res.status(404).json({ error: 'not found' });
     return;
+  }
+
+  // premium-01/task4d: read arm fields via raw SQL (Prisma model not regenerated)
+  let styleArm: string | null = null;
+  let topicArm: string | null = null;
+  try {
+    const rows = await db.$queryRawUnsafe<Array<{ styleArm: string | null; topicArm: string | null }>>(
+      `SELECT "styleArm", "topicArm" FROM "WriteTask" WHERE id = $1`,
+      taskId,
+    );
+    if (rows[0]) {
+      styleArm = rows[0].styleArm;
+      topicArm = rows[0].topicArm;
+    }
+  } catch (e: any) {
+    logger.warn({ taskId, error: e?.message }, '[task4d] failed to read arm fields (non-blocking)');
   }
 
   // Get hints from insights
@@ -81,6 +116,9 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
       brief: task.brief,
       tone: (hints.tone as string) || task.tone || undefined,
       audience: task.audience || undefined,
+      // premium-01/task4d: arm-aware generation
+      styleArm: styleArm || undefined,
+      topicArm: topicArm || undefined,
     });
   } catch (err: any) {
     logger.error({ err, taskId }, 'LLM generation failed');

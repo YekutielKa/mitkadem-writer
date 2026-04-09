@@ -4,6 +4,14 @@ import { signServiceToken } from '../lib/jwt';
 import { httpPost, httpGet } from '../lib/http';
 import { logger } from '../lib/logger';
 import { GeneratedPost, BrandProfile } from '../types/writer';
+import {
+  STYLE_ARMS,
+  isStyleArmName,
+  buildArmPromptFragment,
+  validateAgainstArm,
+  buildRetryFragment,
+  type StyleArmName,
+} from './arm-templates';
 
 /**
  * Загружает brand profile из tenant-brain
@@ -95,10 +103,19 @@ interface GenerateParams {
   audience?: string;
   platform?: string;
   image_brief?: string;
+  // premium-01/task4e: arm-aware generation
+  styleArm?: string;
+  topicArm?: string;
 }
 
 /**
  * Генерирует контент через LLM Hub
+ *
+ * premium-01/task4e: arm-aware generation
+ *   - styleArm in params → constraint block injected into prompt
+ *   - after generation → validateAgainstArm
+ *   - on violation → ONE retry with explicit feedback
+ *   - after retry → log warn, accept anyway (never block publish pipeline)
  */
 export async function generateContent(params: GenerateParams): Promise<GeneratedPost> {
   const env = getEnv();
@@ -111,11 +128,17 @@ export async function generateContent(params: GenerateParams): Promise<Generated
 
   const systemPrompt = buildSystemPrompt(profile);
 
+  // premium-01/task4e: resolve style arm
+  const armName: StyleArmName | null = isStyleArmName(params.styleArm) ? params.styleArm : null;
+  const armFragment = armName ? buildArmPromptFragment(armName) : '';
+
   // Tenant-specific variables for prompt universalization
   const nicheLabel = profile?.businessType || 'specialist';
   const ownerRole = 'мастер';
 
-  const prompt = `${systemPrompt}
+  let prompt = `${systemPrompt}
+
+${armFragment}
 
 ${params.tone ? 'Requested tone: ' + params.tone : ''}
 ${params.audience ? 'Target audience override: ' + params.audience : ''}
@@ -199,35 +222,66 @@ Write a social media post about: ${params.brief}`;
     output: string;
   }
 
-  const data = await httpPost<LLMResponse>(
-    url,
-    {
-      intent: 'quality',
-      input: {
-        messages: [{ role: 'user', content: prompt }],
-        system: systemPrompt,
-        max_tokens: 1200,
-        temperature: 0.8,
+  // premium-01/task4e-part2: arm-aware retry loop
+  const MAX_ATTEMPTS = armName ? 2 : 1;
+  let result: GeneratedPost = { content: '', hashtags: [], image_prompt: '' };
+  let lastViolations: string[] = [];
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const attemptPrompt =
+      attempt > 0 && armName
+        ? prompt + '\n\n' + buildRetryFragment(armName, lastViolations)
+        : prompt;
+
+    const data = await httpPost<LLMResponse>(
+      url,
+      {
+        intent: 'quality',
+        input: {
+          messages: [{ role: 'user', content: attemptPrompt }],
+          system: systemPrompt,
+          max_tokens: 1200,
+          temperature: 0.8,
+        },
       },
+      {
+        Authorization: `Bearer ${signServiceToken()}`,
+      },
+      { timeout: 60000 }
+    );
 
-    },
-    {
-      Authorization: `Bearer ${signServiceToken()}`,
-    },
-    { timeout: 60000 }
-  );
+    const output = data.output || '';
+    const jsonMatch = output.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      result = { content: output, hashtags: [], image_prompt: '' };
+      break;
+    }
+    result = JSON.parse(jsonMatch[0]) as GeneratedPost;
 
-  const output = data.output || '';
+    if (!armName) break;
 
-  // Parse JSON from response
-  const jsonMatch = output.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    return {
-      content: output,
-      hashtags: [],
-      image_prompt: '',
-    };
+    const validation = validateAgainstArm(armName, result.content || '');
+    if (validation.ok) {
+      logger.info(
+        { arm: armName, attempt: attempt + 1, len: (result.content || '').length },
+        '[arm-validation] passed',
+      );
+      break;
+    }
+
+    lastViolations = validation.violations;
+    if (attempt + 1 >= MAX_ATTEMPTS) {
+      logger.warn(
+        { arm: armName, violations: lastViolations, len: (result.content || '').length },
+        '[arm-validation] failed after max attempts, accepting anyway (non-blocking)',
+      );
+    } else {
+      logger.warn(
+        { arm: armName, violations: lastViolations },
+        '[arm-validation] failed, retrying',
+      );
+    }
   }
 
-  return JSON.parse(jsonMatch[0]);
+  return result;
 }

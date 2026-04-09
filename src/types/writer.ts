@@ -8,6 +8,10 @@ export const BriefSchema = z.object({
   tone: z.string().optional(),
   audience: z.string().optional(),
   platform: z.string().optional(),
+  // premium-01/task4c: arm-aware writer
+  styleArm: z.string().optional(),
+  topicArm: z.string().optional(),
+  constraintsOverride: z.record(z.any()).optional(),
 });
 export type BriefInput = z.infer<typeof BriefSchema>;
 
