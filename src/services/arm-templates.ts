@@ -109,6 +109,8 @@ export function buildArmPromptFragment(arm: StyleArmName): string {
   if (c.cta === 'forbidden') lines.push('- NO call-to-action. Pure value, no asks.')
   if (c.cta === 'required') lines.push('- MUST end with a clear, specific call-to-action (book/DM/click)')
   if (c.hookStyle) lines.push(`- Opening style: ${c.hookStyle}`)
+  // premium-01/task4-fix-a: hook diversity — forbid verbatim brief opening
+  lines.push('- The first sentence MUST NOT be a literal copy of the brief topic. Re-frame it: a hook, an angle, an emotion — never the same wording the brief uses.')
   lines.push('=== END STYLE ARM ===')
   return lines.join('\n')
 }
@@ -124,7 +126,13 @@ const EMOJI_REGEX =
 const CTA_REGEX =
   /(запиши|записать|book|booking|dm\b|direct|whatsapp|жми|шапке|link in bio|кликни|оставь|оставить заявк|swipe|message me|написать)/i
 
-export function validateAgainstArm(arm: StyleArmName, caption: string): ValidationResult {
+export function validateAgainstArm(
+  arm: StyleArmName,
+  caption: string,
+  // premium-01/task4-fix-a: writer returns hashtags as a separate field;
+  // count them together with any inline ones in the caption.
+  hashtags?: string[] | null,
+): ValidationResult {
   const c = STYLE_ARMS[arm]
   const violations: string[] = []
   const len = caption.length
@@ -140,7 +148,9 @@ export function validateAgainstArm(arm: StyleArmName, caption: string): Validati
   if (c.emoji === 'forbidden' && hasEmoji) violations.push('emoji forbidden but found')
   if (c.emoji === 'required' && !hasEmoji) violations.push('emoji required but absent')
 
-  const hashtagCount = (caption.match(/#\w+/g) || []).length
+  const inlineHashtagCount = (caption.match(/#\w+/g) || []).length
+  const fieldHashtagCount = Array.isArray(hashtags) ? hashtags.length : 0
+  const hashtagCount = inlineHashtagCount + fieldHashtagCount
   if (c.hashtags?.max !== undefined && hashtagCount > c.hashtags.max) {
     violations.push(`hashtags ${hashtagCount} > max ${c.hashtags.max}`)
   }

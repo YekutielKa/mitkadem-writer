@@ -260,7 +260,8 @@ Write a social media post about: ${params.brief}`;
 
     if (!armName) break;
 
-    const validation = validateAgainstArm(armName, result.content || '');
+    // premium-01/task4-fix-b: pass hashtags[] so validator sees the full count
+    const validation = validateAgainstArm(armName, result.content || '', result.hashtags);
     if (validation.ok) {
       logger.info(
         { arm: armName, attempt: attempt + 1, len: (result.content || '').length },
