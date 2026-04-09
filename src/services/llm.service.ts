@@ -12,6 +12,10 @@ import {
   buildRetryFragment,
   type StyleArmName,
 } from './arm-templates';
+// premium-01/module-a: brief enrichment
+import { enrichBrief } from './brief-enricher';
+import type { EnrichedBrief } from '../types/enriched-brief';
+import { getPrisma } from '../lib/prisma';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Brand profile loader
@@ -209,6 +213,111 @@ Return ONLY valid JSON with this structure:
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// premium-01/module-a: build premium fragment from EnrichedBrief
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Build the premium prompt fragment that injects anti-repetition + audience
+ * intelligence + winning hooks into the generation prompt.
+ *
+ * Section ordering matters — Sonnet pays more attention to constraints early
+ * in the prompt. We put forbidden things FIRST, then guidance, then examples.
+ */
+function buildPremiumFragment(enriched: EnrichedBrief): string {
+  const sections: string[] = [];
+
+  // ── ANTI-REPETITION (highest priority — what NOT to do) ──────────────────
+  if (enriched.antiRep && enriched.antiRep.recentHooks.length > 0) {
+    const ar = enriched.antiRep;
+    sections.push('=== ANTI-REPETITION (CRITICAL — last posts of THIS account) ===');
+
+    if (ar.forbiddenFirstWords.length > 0) {
+      sections.push(
+        `FORBIDDEN first words (you used these recently): ${ar.forbiddenFirstWords.join(', ')}`,
+      );
+      sections.push('Your hook MUST start with a different word.');
+    }
+
+    if (ar.overusedTechniques.length > 0) {
+      sections.push(
+        `OVERUSED hook techniques (do NOT use these again): ${ar.overusedTechniques.join(', ')}`,
+      );
+      const allTechniques = [
+        'pattern_interrupt',
+        'specific_number',
+        'sensory_detail',
+        'contradiction',
+        'story',
+        'provocation',
+        'quote',
+        'question',
+        'statement',
+      ];
+      const allowed = allTechniques.filter((t) => !ar.overusedTechniques.includes(t));
+      sections.push(`Use one of these instead: ${allowed.join(', ')}`);
+    }
+
+    if (ar.recentTopicKeywords.length > 0) {
+      sections.push(
+        `Recent topic keywords (avoid leaning on these): ${ar.recentTopicKeywords.slice(0, 12).join(', ')}`,
+      );
+    }
+
+    sections.push('Last 5 hooks (do NOT paraphrase or echo any of them):');
+    ar.recentHooks.slice(0, 5).forEach((h, i) => {
+      sections.push(`  ${i + 1}. [${h.hookTechnique}] "${h.hookText.slice(0, 100)}"`);
+    });
+    sections.push('=== END ANTI-REPETITION ===');
+    sections.push('');
+  }
+
+  // ── AUDIENCE INTELLIGENCE (what works for THIS account's audience) ───────
+  if (enriched.audience && !enriched.audience.coldStart) {
+    const a = enriched.audience;
+    sections.push('=== AUDIENCE INTELLIGENCE (real engagement data) ===');
+    sections.push(
+      `Posts analyzed: ${a.postsAnalyzed}. Average engagement rate: ${(a.avgEngagementRate * 100).toFixed(2)}%`,
+    );
+
+    if (a.preferHints.length > 0) {
+      sections.push('PROVEN to work for this audience:');
+      a.preferHints.slice(0, 5).forEach((h) => {
+        const conf = h.confidence >= 0.7 ? 'HIGH' : h.confidence >= 0.4 ? 'MEDIUM' : 'LOW';
+        sections.push(
+          `  + ${h.dimension}=${h.bucket} (${conf} confidence, ${h.sampleSize} posts)`,
+        );
+      });
+    }
+
+    if (a.avoidHints.length > 0) {
+      sections.push('PROVEN to underperform for this audience:');
+      a.avoidHints.slice(0, 5).forEach((h) => {
+        const conf = h.confidence >= 0.7 ? 'HIGH' : h.confidence >= 0.4 ? 'MEDIUM' : 'LOW';
+        sections.push(
+          `  - ${h.dimension}=${h.bucket} (${conf} confidence, ${h.sampleSize} posts)`,
+        );
+      });
+    }
+
+    if (a.winningHooks.length > 0) {
+      sections.push('TOP performing hooks from this account (study the technique, NOT the wording):');
+      a.winningHooks.slice(0, 3).forEach((h, i) => {
+        sections.push(
+          `  ${i + 1}. [${h.technique || 'unknown'}, ${(h.engagementRate * 100).toFixed(2)}% er, ${h.impressions} impr]`,
+        );
+        sections.push(`     "${h.hookText}"`);
+      });
+    }
+    sections.push('=== END AUDIENCE INTELLIGENCE ===');
+    sections.push('');
+  } else if (enriched.audience?.coldStart) {
+    sections.push('// Audience: cold start (insufficient data) — use general best practices');
+    sections.push('');
+  }
+
+  return sections.join('\n');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main entry point
 // ─────────────────────────────────────────────────────────────────────────────
 export async function generateContent(params: GenerateParams): Promise<GeneratedPost> {
@@ -228,10 +337,30 @@ export async function generateContent(params: GenerateParams): Promise<Generated
 
   const universalBody = buildUniversalPromptBody(nicheLabel, ownerRole);
 
-  // Style arm goes FIRST (highest priority), universal body second, brief last
+  // premium-01/module-a: enrich the brief with anti-rep + audience layers
+  let premiumFragment = '';
+  if (params.tenantId) {
+    try {
+      const enriched = await enrichBrief({
+        tenantId: params.tenantId,
+        rawBrief: params.brief,
+        styleArm: params.styleArm,
+        topicArm: params.topicArm,
+        prisma: getPrisma(),
+      });
+      premiumFragment = buildPremiumFragment(enriched);
+    } catch (e: any) {
+      logger.warn({ tenantId: params.tenantId, error: e?.message }, '[module-a] enrichment failed (non-blocking)');
+    }
+  }
+
+  // Section ordering: arm constraints → premium fragment → universal body → brief
+  // Premium fragment goes BEFORE universal body so anti-rep takes priority over generic rules
   const prompt = `${systemPrompt}
 
 ${armFragment}
+
+${premiumFragment}
 
 ${params.tone ? 'Requested tone: ' + params.tone : ''}
 ${params.audience ? 'Target audience override: ' + params.audience : ''}
