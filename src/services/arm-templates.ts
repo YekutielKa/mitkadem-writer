@@ -123,8 +123,10 @@ export interface ValidationResult {
 const EMOJI_REGEX =
   /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F0FF}\u{1F100}-\u{1F1FF}]/u
 
+// premium-01/task4-fix-e: stem-based CTA matching — catches natural Russian
+// inflections (пиши/пишите/напиши, приходи/приходите, позвон/звоните, etc.)
 const CTA_REGEX =
-  /(запиши|записать|book|booking|dm\b|direct|whatsapp|жми|шапке|link in bio|кликни|оставь|оставить заявк|swipe|message me|написать)/i
+  /(запис|пиш|напиш|приход|позвон|звон|брон|заказ|купи|кликни|жми|шапке|оставь|оставить заявк|book|booking|dm\b|direct|директ|whatsapp|link in bio|swipe|message me|тор\b|תור|להזמין|לקבוע)/i
 
 export function validateAgainstArm(
   arm: StyleArmName,
@@ -135,13 +137,17 @@ export function validateAgainstArm(
 ): ValidationResult {
   const c = STYLE_ARMS[arm]
   const violations: string[] = []
-  const len = caption.length
+  // premium-01/task4-fix-e: length means prose body, NOT body+hashtags.
+  // Strip inline #tags before measuring so educational_long (max 700) isn't
+  // failed by Sonnet appending 9 hashtags worth ~100 chars at the end.
+  const proseBody = caption.replace(/#\w+/g, '').trim()
+  const len = proseBody.length
 
   if (c.minChars !== undefined && len < c.minChars) {
-    violations.push(`length ${len} < min ${c.minChars}`)
+    violations.push(`length ${len} < min ${c.minChars} (prose body, hashtags excluded)`)
   }
   if (c.maxChars !== undefined && len > c.maxChars) {
-    violations.push(`length ${len} > max ${c.maxChars}`)
+    violations.push(`length ${len} > max ${c.maxChars} (prose body, hashtags excluded)`)
   }
 
   const hasEmoji = EMOJI_REGEX.test(caption)
