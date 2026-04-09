@@ -13,13 +13,12 @@ import {
   type StyleArmName,
 } from './arm-templates';
 
-/**
- * Загружает brand profile из tenant-brain
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// Brand profile loader
+// ─────────────────────────────────────────────────────────────────────────────
 export async function loadBrandProfile(tenantId: string): Promise<BrandProfile | null> {
   const env = getEnv();
   const url = `${env.TENANT_BRAIN_URL}/v1/brand/profile/${tenantId}`;
-
   try {
     const profile = await httpGet<BrandProfile>(url, {
       Authorization: `Bearer ${signServiceToken()}`,
@@ -31,11 +30,10 @@ export async function loadBrandProfile(tenantId: string): Promise<BrandProfile |
   }
 }
 
-/**
- * Строит персонализированный system prompt на основе brand profile
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// System prompt builder
+// ─────────────────────────────────────────────────────────────────────────────
 function buildSystemPrompt(profile: BrandProfile | null): string {
-  // Load writer expertise knowledge base
   const writerKnowledge = getWriterKnowledge();
 
   if (!profile) {
@@ -48,44 +46,23 @@ function buildSystemPrompt(profile: BrandProfile | null): string {
     `You are a professional Instagram copywriter for a ${profile.businessType} business.`,
   ];
 
-  // Inject knowledge base
   if (writerKnowledge) {
     parts.push('\n=== COPYWRITING EXPERTISE (follow these rules and patterns) ===');
     parts.push(writerKnowledge.slice(0, 4000));
     parts.push('=== END EXPERTISE ===\n');
   }
 
-  if (profile.businessName) {
-    parts.push(`Business name: "${profile.businessName}"`);
-  }
-
+  if (profile.businessName) parts.push(`Business name: "${profile.businessName}"`);
   if (profile.city || profile.country) {
     parts.push(`Location: ${[profile.city, profile.country].filter(Boolean).join(', ')}`);
   }
-
-  if (profile.languages?.length) {
-    parts.push(`Languages: ${profile.languages.join(', ')}`);
-  }
-
-  if (profile.targetAudience) {
-    parts.push(`Target audience: ${profile.targetAudience}`);
-  }
-
-  if (profile.positioningStyle) {
-    parts.push(`Brand positioning: ${profile.positioningStyle}`);
-  }
-
-  if (profile.tagline) {
-    parts.push(`Tagline: "${profile.tagline}"`);
-  }
-
-  if (profile.uniqueValue) {
-    parts.push(`Unique value: ${profile.uniqueValue}`);
-  }
-
+  if (profile.languages?.length) parts.push(`Languages: ${profile.languages.join(', ')}`);
+  if (profile.targetAudience) parts.push(`Target audience: ${profile.targetAudience}`);
+  if (profile.positioningStyle) parts.push(`Brand positioning: ${profile.positioningStyle}`);
+  if (profile.tagline) parts.push(`Tagline: "${profile.tagline}"`);
+  if (profile.uniqueValue) parts.push(`Unique value: ${profile.uniqueValue}`);
   parts.push(`Tone: ${profile.preferredTone || 'professional and warm'}`);
 
-  // Добавляем примеры одобренных постов (few-shot)
   if (profile.approvedPosts?.length > 0) {
     parts.push('\n--- APPROVED POST EXAMPLES (match this style) ---');
     profile.approvedPosts.slice(0, 3).forEach((post, i) => {
@@ -96,6 +73,9 @@ function buildSystemPrompt(profile: BrandProfile | null): string {
   return parts.join('\n');
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Generate params
+// ─────────────────────────────────────────────────────────────────────────────
 interface GenerateParams {
   tenantId?: string;
   brief: string;
@@ -103,49 +83,59 @@ interface GenerateParams {
   audience?: string;
   platform?: string;
   image_brief?: string;
-  // premium-01/task4e: arm-aware generation
   styleArm?: string;
   topicArm?: string;
 }
 
-/**
- * Генерирует контент через LLM Hub
- *
- * premium-01/task4e: arm-aware generation
- *   - styleArm in params → constraint block injected into prompt
- *   - after generation → validateAgainstArm
- *   - on violation → ONE retry with explicit feedback
- *   - after retry → log warn, accept anyway (never block publish pipeline)
- */
-export async function generateContent(params: GenerateParams): Promise<GeneratedPost> {
-  const env = getEnv();
+// ─────────────────────────────────────────────────────────────────────────────
+// Deterministic post-generation enforcement
+//
+// Some constraints are mechanical (count, presence/absence) and can be enforced
+// in code far more reliably than by trusting the LLM. We do that here BEFORE
+// the validator runs, so the validator only catches semantic violations.
+// ─────────────────────────────────────────────────────────────────────────────
+const EMOJI_REGEX_GLOBAL =
+  /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F0FF}\u{1F100}-\u{1F1FF}]/gu;
 
-  // Загружаем brand profile если есть tenantId
-  let profile: BrandProfile | null = null;
-  if (params.tenantId) {
-    profile = await loadBrandProfile(params.tenantId);
+function enforceArmConstraints(arm: StyleArmName, result: GeneratedPost): void {
+  const c = STYLE_ARMS[arm];
+
+  // 1. Truncate hashtags array to max (Sonnet overshoots "5-10" → 15-20)
+  if (c.hashtags?.max !== undefined && Array.isArray(result.hashtags)) {
+    if (result.hashtags.length > c.hashtags.max) {
+      const before = result.hashtags.length;
+      result.hashtags = result.hashtags.slice(0, c.hashtags.max);
+      logger.info(
+        { arm, before, after: result.hashtags.length },
+        '[arm-enforcement] hashtags truncated to max',
+      );
+    }
   }
 
-  const systemPrompt = buildSystemPrompt(profile);
+  // 2. Strip emoji from caption if forbidden
+  if (c.emoji === 'forbidden' && result.content) {
+    const stripped = result.content.replace(EMOJI_REGEX_GLOBAL, '');
+    if (stripped !== result.content) {
+      result.content = stripped.replace(/  +/g, ' ').trim();
+      logger.info({ arm }, '[arm-enforcement] emoji stripped from caption');
+    }
+  }
 
-  // premium-01/task4e: resolve style arm
-  const armName: StyleArmName | null = isStyleArmName(params.styleArm) ? params.styleArm : null;
-  const armFragment = armName ? buildArmPromptFragment(armName) : '';
+  // 3. Strip inline hashtags from caption if hashtags forbidden (max=0)
+  if (c.hashtags?.max === 0 && result.content) {
+    const stripped = result.content.replace(/#\w+/g, '').replace(/  +/g, ' ').trim();
+    if (stripped !== result.content) {
+      result.content = stripped;
+      logger.info({ arm }, '[arm-enforcement] inline hashtags stripped from caption');
+    }
+  }
+}
 
-  // Tenant-specific variables for prompt universalization
-  const nicheLabel = profile?.businessType || 'specialist';
-  const ownerRole = 'мастер';
-
-  let prompt = `${systemPrompt}
-
-${armFragment}
-
-${params.tone ? 'Requested tone: ' + params.tone : ''}
-${params.audience ? 'Target audience override: ' + params.audience : ''}
-${params.platform ? 'Platform: ' + params.platform + ' (adjust length and style)' : ''}
-${params.image_brief ? 'Image context: ' + params.image_brief : ''}
-
-=== ПРАВИЛА ТЕКСТА (PREMIUM COPYWRITING) ===
+// ─────────────────────────────────────────────────────────────────────────────
+// Universal prompt body — NO hardcoded counts that conflict with arms
+// ─────────────────────────────────────────────────────────────────────────────
+function buildUniversalPromptBody(nicheLabel: string, ownerRole: string): string {
+  return `=== ПРАВИЛА ТЕКСТА (PREMIUM COPYWRITING) ===
 
 ПЕРВАЯ СТРОКА — это 80% успеха поста. Она должна ОСТАНОВИТЬ скролл.
 Техники для первой строки:
@@ -153,7 +143,7 @@ ${params.image_brief ? 'Image context: ' + params.image_brief : ''}
 - Вопрос-боль: "${nicheLabel} не держится? Знакомо?"
 - Провокация: "Хватит переплачивать за ${nicheLabel} который не держится"
 - Факт: "3-4 недели без сколов. Не обещание — стандарт"
-- Эмоция: "Когда клиент присылает фото через 3 недели 🤍"
+- Эмоция: "Когда клиент присылает фото через 3 недели"
 
 НЕ ИСПОЛЬЗУЙ банальные первые строки:
 - ❌ "Хотите красивый ${nicheLabel}?"
@@ -164,25 +154,28 @@ ${params.image_brief ? 'Image context: ' + params.image_brief : ''}
 1. Hook (первая строка) — останавливает скролл
 2. Развитие — боль/решение/история (2-3 предложения)
 3. Конкретика — цена/время/результат
-4. CTA — чёткий призыв к действию
-5. Хэштеги — 5-10 штук
+4. CTA — чёткий призыв к действию (если style arm не запрещает)
 
 СТИЛЬ:
 - Match the language of the brief (Hebrew/Russian/English)
 - Короткие абзацы, 1-2 предложения каждый
-- Эмодзи умеренно (2-3 на пост)
 - Прямота и конкретика, не лей воду
 - НИКОГДА не используй слово "ахла"
 - Пиши как подруга-профи, не как рекламный буклет
 
+NOTE ON LENGTH/EMOJI/HASHTAGS/CTA:
+The STYLE ARM block above (if present) is the AUTHORITATIVE source for these
+parameters. If anything in this prompt conflicts with the style arm, the
+STYLE ARM WINS — no exceptions.
+
 === ПРАВИЛА IMAGE_PROMPT (CRITICAL — GEMINI/IMAGEN) ===
 
 image_prompt — это промпт для AI-генерации фотореалистичного изображения.
-Промпт ДОЛЖЕН быть детально проработан. AI генерирует красиво, но тупой — ему надо всё разжевать.
+Промпт ДОЛЖЕН быть детально проработан.
 
 ОБЯЗАТЕЛЬНЫЕ ЭЛЕМЕНТЫ КАЖДОГО ПРОМПТА:
 1. "Photorealistic" — ВСЕГДА первое слово
-2. АНАТОМИЯ РУК: "exactly ONE left hand and ONE right hand, each with exactly 5 fingers, natural hand anatomy, realistic finger proportions"
+2. АНАТОМИЯ РУК (если в кадре): "exactly ONE left hand and ONE right hand, each with exactly 5 fingers, natural hand anatomy, realistic finger proportions"
 3. ЛОГИКА СЦЕНЫ: описывай как реальный фотограф — что где стоит, откуда свет, что видит камера. Кактус рядом с кофе = нелогично. Продумай каждый предмет.
 4. "CRITICAL: NO text, NO letters, NO words, NO logos, NO watermarks, NO brand names on the image"
 5. КОНКРЕТНЫЕ ЦВЕТА: не "красивый цвет", а "dusty rose", "deep burgundy", "soft lavender"
@@ -192,27 +185,60 @@ image_prompt — это промпт для AI-генерации фотореа
 9. "Mediterranean warm tone color palette"
 
 РАЗНООБРАЗИЕ СЦЕН (КРИТИЧНО — не повторять одно и то же!):
-- Крупный план ногтей на мраморной поверхности с кофе
+- Крупный план продукта/результата на фактурной поверхности
 - Результат работы в красивом антураже
-- Процесс работы (${ownerRole} в чёрных перчатках)
-- Рабочее место мастера (белый стол, ring light, инструменты)
-- Lifestyle: руки на руле авто, с сумочкой, с бокалом
-- Детали: стразы крупным планом, градиент, French
-- Сезонные: осенние листья + тёплые тона, весенние цветы + пастель
+- Процесс работы (${ownerRole} в работе)
+- Рабочее место мастера
+- Lifestyle: продукт в естественном окружении
+- Детали крупным планом
+- Сезонные мотивы
 
 ЗАПРЕЩЕНО В ПРОМПТАХ:
 - Несколько пар рук (если не процесс работы мастер+клиент)
 - Нелогичные сочетания предметов
 - Нереалистичные позы пальцев
 - Текст на изображении (ни на каком языке)
-- Фон который отвлекает от ногтей
+- Фон который отвлекает от главного объекта
 
 Return ONLY valid JSON with this structure:
 {
-  "content": "The post text with emojis, hook first line, CTA at the end",
-  "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
+  "content": "The post text — STRICTLY following the STYLE ARM constraints",
+  "hashtags": ["hashtag1", "hashtag2"],
   "image_prompt": "Photorealistic... [full detailed prompt following ALL rules above]"
+}`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main entry point
+// ─────────────────────────────────────────────────────────────────────────────
+export async function generateContent(params: GenerateParams): Promise<GeneratedPost> {
+  const env = getEnv();
+
+  let profile: BrandProfile | null = null;
+  if (params.tenantId) {
+    profile = await loadBrandProfile(params.tenantId);
+  }
+
+  const systemPrompt = buildSystemPrompt(profile);
+  const armName: StyleArmName | null = isStyleArmName(params.styleArm) ? params.styleArm : null;
+  const armFragment = armName ? buildArmPromptFragment(armName) : '';
+
+  const nicheLabel = profile?.businessType || 'specialist';
+  const ownerRole = 'мастер';
+
+  const universalBody = buildUniversalPromptBody(nicheLabel, ownerRole);
+
+  // Style arm goes FIRST (highest priority), universal body second, brief last
+  const prompt = `${systemPrompt}
+
+${armFragment}
+
+${params.tone ? 'Requested tone: ' + params.tone : ''}
+${params.audience ? 'Target audience override: ' + params.audience : ''}
+${params.platform ? 'Platform: ' + params.platform + ' (adjust style)' : ''}
+${params.image_brief ? 'Image context: ' + params.image_brief : ''}
+
+${universalBody}
 
 Write a social media post about: ${params.brief}`;
 
@@ -222,7 +248,7 @@ Write a social media post about: ${params.brief}`;
     output: string;
   }
 
-  // premium-01/task4e-part2: arm-aware retry loop
+  // Arm-aware retry loop: 1 attempt without arm, 2 with arm
   const MAX_ATTEMPTS = armName ? 2 : 1;
   let result: GeneratedPost = { content: '', hashtags: [], image_prompt: '' };
   let lastViolations: string[] = [];
@@ -260,7 +286,9 @@ Write a social media post about: ${params.brief}`;
 
     if (!armName) break;
 
-    // premium-01/task4-fix-b: pass hashtags[] so validator sees the full count
+    // Deterministic enforcement first (mechanical fixes), then validate
+    enforceArmConstraints(armName, result);
+
     const validation = validateAgainstArm(armName, result.content || '', result.hashtags);
     if (validation.ok) {
       logger.info(
