@@ -35,8 +35,18 @@ export const STYLE_ARMS: Record<StyleArmName, ArmConstraints> = {
     emoji: 'forbidden',
     hashtags: { max: 0 },
     cta: 'optional',
-    description:
-      'Ultra-short, punchy statement. One thought, one line break max. No emoji, no hashtags. Hook + payoff in under 200 characters total.',
+    description: `Ultra-short sensory snapshot. One concrete scene or moment. No emoji, no hashtags.
+
+STRUCTURE: Hook (concrete image) → Payoff (what it means) in under 200 chars total.
+
+GOOD EXAMPLE:
+"Покрытие, которое не сдаётся. Три недели, ежедневные перчатки в Ихилов, ни одного скола."
+
+BAD EXAMPLE (generic brochure):
+"3-4 недели без сколов — не удача, а результат аппаратного маникюра с авторским дизайном."
+
+ЗАПРЕЩЕНО: абстракции ("результат техники", "залог стойкости"), конструкция "не X, а Y".
+Используй: конкретный момент, место, объект, тактильную деталь.`,
   },
   educational_long: {
     minChars: 500,
@@ -44,43 +54,114 @@ export const STYLE_ARMS: Record<StyleArmName, ArmConstraints> = {
     emoji: 'required',
     cta: 'required',
     hashtags: { min: 5, max: 10 },
-    description:
-      'Long-form educational post. Teach something the audience does not know. 500-700 chars total. 2-3 emoji integrated naturally. End with a clear CTA. Include 5-10 relevant hashtags at the end.',
+    description: `Long-form educational post that TEACHES something specific the audience didn't know. 500-700 chars. 2-3 emoji. CTA at end. 5-10 hashtags.
+
+STRUCTURE:
+1. Myth or common misconception (1-2 sentences)
+2. The surprising truth with SPECIFIC technical details (numbers, brands, measurements)
+3. Vivid metaphor that makes the technical accessible
+4. Empowering takeaway for the reader (not a sales pitch)
+
+GOOD EXAMPLE:
+"Все думают что для долгого маникюра главное — гель-лак. Это неправда. Самый стойкий маникюр зависит от того что происходит за 4 минуты ДО нанесения — матировка 240 грит, обезжиривание двукратное. Дорогой гель-лак на плохой подготовке — это обои на сырой стене."
+
+BAD EXAMPLE:
+"Аппаратная техника позволяет работать максимально аккуратно. Вместе с профессиональной базой покрытие сохраняет блеск и прочность на долгий срок."
+
+ЗАПРЕЩЕНО: "профессиональная база", "максимально аккуратно", "сохраняет блеск". Назови КОНКРЕТНЫЙ материал, КОНКРЕТНУЮ технику, КОНКРЕТНОЕ время.`,
   },
   question_hook: {
     minChars: 250,
     maxChars: 400,
     emoji: 'optional',
     cta: 'required',
-    hookStyle: 'must open with a direct question to the reader',
-    description:
-      'Medium length. The very first sentence MUST be a question that addresses the reader directly. 250-400 chars. Build curiosity in line 1, give the answer in lines 2-4. End with CTA.',
+    hookStyle: 'must open with a provocative or uncomfortable question',
+    description: `Medium length. First sentence = question that makes reader STOP and think. Not a rhetorical "Знаете почему" — a real uncomfortable question.
+
+STRUCTURE:
+1. Question that challenges (1 sentence)
+2. Surprising answer with NUMBERS (2-3 sentences)
+3. Concrete proof or example
+4. Specific CTA ("напиши слово X в Direct")
+
+GOOD EXAMPLE:
+"Сколько раз в этом году ты переделывала маникюр потому что он не дожил до следующей записи? Среднее число у моих новых клиенток: 7 раз за полгода. Это около 1400 шекелей в год."
+
+BAD EXAMPLE:
+"Знаете, почему маникюр часто не держится? Всё дело в технике и материалах."
+
+ЗАПРЕЩЕНО: "Знаете почему/что/как" — это банальный hook. Начни с вопроса который ЗАСТАВЛЯЕТ считать, вспоминать, чувствовать дискомфорт.`,
   },
   testimonial: {
     minChars: 300,
     maxChars: 600,
     emoji: 'optional',
     cta: 'required',
-    hookStyle: 'first-person customer voice or quoted client story',
-    description:
-      'Customer testimonial or success story. Written in first-person ("My client said...") or as a direct quote. 300-600 chars. Specific details, not generic praise. End with subtle CTA.',
+    hookStyle: 'direct quote from a specific client with their profession and context',
+    description: `Client story. Opens with VERBATIM quote. Client has a NAME, PROFESSION, SPECIFIC situation.
+
+STRUCTURE:
+1. Direct quote from client (in «кавычках» or "quotes") — first sentence
+2. Who this person is (profession, life context — NOT "одна клиентка")
+3. What specifically was done (technique, materials, timeline)
+4. Human moment at the end (humor, emotion, ongoing relationship)
+
+GOOD EXAMPLE:
+"«Я кажется впервые за пять лет не помню когда делала ногти». Алина — медсестра в Ихилов, 12 часов в перчатках. Мы попробовали трёхслойную базу Kodi с просушкой между слоями. Сейчас она пишет раз в месяц — проверяет что я не зазналась."
+
+BAD EXAMPLE:
+"«Мой маникюр держится уже 3 недели» — так говорит наша клиентка. Аппаратная техника и трёхслойное нанесение дают стойкий результат."
+
+ЗАПРЕЩЕНО: "наша клиентка", "одна из клиенток" — дай ИМЯ и ПРОФЕССИЮ. "Стойкий результат" — абстракция, назови конкретный срок и ситуацию.`,
   },
   before_after: {
     minChars: 250,
     maxChars: 500,
     emoji: 'optional',
     cta: 'required',
-    hookStyle: 'before/after framing',
-    description:
-      'Before/after transformation framing. Describe the "before" state in 1-2 sentences, then the "after". 250-500 chars. End with CTA inviting the reader to start their own transformation.',
+    hookStyle: 'single person transformation story with timeline',
+    description: `Transformation of ONE specific person over TIME. Not formula "до: X, после: Y" — a story with milestones.
+
+STRUCTURE:
+1. Person's name + situation BEFORE (specific problem, profession, emotion)
+2. Timeline with milestones (first visit, 3 weeks later, 2 months later)
+3. Specific measurable change (not "сияние", but "ногти отросли на 1.5мм")
+4. Empowering close (if you think it's impossible — she thought so too)
+
+GOOD EXAMPLE:
+"Маша пришла в феврале. Хайтек, презентации каждую среду, ногти 2мм — грызла. Первый визит — восстанавливающее покрытие без иллюзий. Через три недели ногти +1.5мм. К маю — нормальная длина. К июлю — попросила дизайн."
+
+BAD EXAMPLE:
+"До: сколы и потёртости. После: ровное покрытие и сияние без потерь."
+
+ЗАПРЕЩЕНО: формула "До/После" без истории. Должна быть КОНКРЕТНАЯ история ОДНОГО человека с ВРЕМЕННОЙ шкалой.`,
   },
   tip_short: {
     maxChars: 300,
     emoji: 'optional',
     hashtags: { max: 0 },
     cta: 'forbidden',
-    description:
-      'A single useful tip the audience can apply today. Up to 300 chars. No CTA — pure value. No hashtags. May use 0-1 emoji.',
+    description: `Tip = actionable знание которое читатель применит САМ, БЕСПЛАТНО, ДОМА. Это НЕ описание услуги. Это НЕ реклама. Это полезный FACT.
+
+ОБЯЗАТЕЛЬНАЯ СТРУКТУРА:
+1. Конкретный technical fact (одна строка)
+2. КАК этот fact работает физически/химически (объяснение)
+3. ЧТО конкретно делать читателю (action item)
+
+ПРАВИЛЬНЫЙ TIP:
+"Гель-лак трескается чаще не от носки, а от перепада температур. Горячая вода при мытье посуды → холодные руки на воздухе → микротрещины в покрытии. Перчатки при мытье — самое скучное что ты можешь сделать для маникюра. И самое эффективное."
+
+НЕПРАВИЛЬНЫЙ TIP (реклама, не tip):
+"Аппаратный маникюр с авторским градиентом в Marina Nails держится 3-4 недели без сколов. Премиальные материалы гарантируют стойкость."
+
+ЗАПРЕЩЕНО:
+❌ Упоминать своё имя/салон/бренд
+❌ Заканчивать призывом записаться
+❌ Описывать "что мы делаем"
+❌ "гарантирует стойкость", "премиальные материалы"
+
+ВИДИШЬ РАЗНИЦУ? Tip = fact + физика + action. Реклама = описание услуги + абстракция.
+Ты пишешь TIP, а не рекламу.`,
   },
 }
 
