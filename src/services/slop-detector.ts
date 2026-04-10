@@ -165,6 +165,19 @@ const RU_SLOP_RULES: SlopRule[] = [
     fix: '"Ваше преображение/стиль" — generic. Конкретное имя/ситуация.',
   },
 
+  {
+    name: 'премиум_материалы',
+    test: () => /преми(ум|альн)\w*\s+материал/iu,
+    severity: 'high',
+    fix: '"Премиум материалы" — generic claim. Назови конкретный бренд (OPI, Kodi, CND).',
+  },
+  {
+    name: 'generic_hook_как_часто',
+    test: () => /^как\s+часто\s+(ты|вы)\s+(замечаешь|замечаете)/iu,
+    severity: 'medium',
+    fix: '"Как часто ты замечаешь" — слабый hook. Начни с факта или конкретного числа.',
+  },
+
   // pw3/step2: end of new rules
   // ── MEDIUM severity: generic abstractions ───────────────────────────────
   {
