@@ -72,7 +72,7 @@ BAD EXAMPLE:
   },
   question_hook: {
     minChars: 250,
-    maxChars: 400,
+    maxChars: 450,
     emoji: 'optional',
     cta: 'required',
     hookStyle: 'must open with a provocative or uncomfortable question',
