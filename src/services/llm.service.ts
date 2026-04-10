@@ -195,11 +195,12 @@ Return ONLY valid JSON with this exact structure (no markdown wrapping, no pream
 function buildFinalUserMessage(opts: {
   brief: string;
   enriched: EnrichedBrief;
+  language: string; // pw3/fix4
   tone?: string;
   audience?: string;
   imageBrief?: string;
 }): string {
-  const { brief, enriched, tone, audience, imageBrief } = opts;
+  const { brief, enriched, language: msgLang, tone, audience, imageBrief } = opts;
   const sections: string[] = [];
 
   // pw3/fix3: brief topic OVERRIDES brand context
@@ -308,6 +309,13 @@ function buildFinalUserMessage(opts: {
     sections.push('');
   }
 
+  // pw3/fix4: explicit language directive — Sonnet must see this clearly
+  const langNames: Record<string, string> = { ru: 'Russian (русский)', he: 'Hebrew (עברית)', en: 'English' };
+  const langName = langNames[msgLang] || msgLang;
+  sections.push('# ЯЗЫК / LANGUAGE');
+  sections.push(`Write this caption ENTIRELY in ${langName}. Every word of the caption must be in ${langName}. This is non-negotiable.`);
+  sections.push('');
+
   // The actual brief — last so it has the most attention
   sections.push('# Brief для этого поста');
   sections.push(brief);
@@ -370,7 +378,7 @@ function buildMessages(opts: {
   // 3. Final user message — the real brief + critical dynamic context
   messages.push({
     role: 'user',
-    content: buildFinalUserMessage({ brief, enriched, tone, audience, imageBrief }),
+    content: buildFinalUserMessage({ brief, enriched, language, tone, audience, imageBrief }),
   });
 
   return messages;
