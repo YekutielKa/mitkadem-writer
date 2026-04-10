@@ -1,9 +1,6 @@
 /**
- * SMART PHASE PREMIUM 01 — Premium Writer 2.0
- * Reference caption type used by the many-shot prompt builder.
- *
- * Each reference caption is a curated example of premium copy that
- * Sonnet should learn to imitate via conversation-history few-shot.
+ * Premium Writer 3.0 — Reference caption types.
+ * Extended interface supporting 93 real captions from research.
  */
 
 export type Language = 'ru' | 'he' | 'en';
@@ -15,16 +12,31 @@ export type StyleArm =
   | 'testimonial'
   | 'before_after'
   | 'tip_short'
+  | 'manifesto'
+  | 'origin_story'
+  | 'brand_voice'
+  | 'craft_philosophy'
+  | 'anti_pattern'
   | 'any';
 
 export interface ReferenceCaption {
+  id: string;
   source: string;
+  sourceUrl?: string;
+  author?: string;
+  platform: string;
   language: Language;
-  style_arm: StyleArm;
-  hook_technique: string;
+  niche: string;
+  styleArm: string;
+  hookTechnique: string;
   caption: string;
-  techniques_used: string[];
-  why_it_works: string;
-  word_count: number;
-  hashtag_count: number;
+  whyItWorks: string;
+  notablePhrases: string[];
+  universalTechniques: string[];
+  applicabilityToMitkadem?: string;
+  wordCount: number;
+  emojiCount: number;
+  hashtagCount: number;
+  hasCta: boolean;
+  ctaType?: string;
 }
