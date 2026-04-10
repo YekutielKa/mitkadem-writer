@@ -26,17 +26,20 @@ router.post('/brief', authMiddleware, async (req: Request, res: Response) => {
   });
 
   // premium-01/task4d: persist arm fields via raw SQL (Prisma model not regenerated)
-  if (input.styleArm || input.topicArm || input.constraintsOverride) {
+  // pw3/fix3: store language alongside arm columns
+  if (input.styleArm || input.topicArm || input.constraintsOverride || input.language) {
     try {
       await db.$executeRawUnsafe(
         `UPDATE "WriteTask"
             SET "styleArm" = $1,
                 "topicArm" = $2,
-                "constraints" = $3::jsonb
-          WHERE id = $4`,
+                "constraints" = $3::jsonb,
+                "language" = $4
+          WHERE id = $5`,
         input.styleArm ?? null,
         input.topicArm ?? null,
         input.constraintsOverride ? JSON.stringify(input.constraintsOverride) : null,
+        input.language ?? null,
         task.id,
       );
     } catch (e: any) {
@@ -68,15 +71,19 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
   // premium-01/task4d: read arm fields via raw SQL (Prisma model not regenerated)
   let styleArm: string | null = null;
   let topicArm: string | null = null;
+  let taskLanguage: string | null = null;
   try {
-    const rows = await db.$queryRawUnsafe<Array<{ styleArm: string | null; topicArm: string | null }>>(
-      `SELECT "styleArm", "topicArm" FROM "WriteTask" WHERE id = $1`,
+    const rows = await db.$queryRawUnsafe<Array<{ styleArm: string | null; topicArm: string | null; language: string | null }>>(
+      `SELECT "styleArm", "topicArm", "language" FROM "WriteTask" WHERE id = $1`,
       taskId,
     );
     if (rows[0]) {
       styleArm = rows[0].styleArm;
       topicArm = rows[0].topicArm;
     }
+  if (rows[0] && (rows[0] as any).language) {
+    taskLanguage = (rows[0] as any).language;
+  }
   } catch (e: any) {
     logger.warn({ taskId, error: e?.message }, '[task4d] failed to read arm fields (non-blocking)');
   }
@@ -119,6 +126,7 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
       // premium-01/task4d: arm-aware generation
       styleArm: styleArm || undefined,
       topicArm: topicArm || undefined,
+      language: taskLanguage || undefined, // pw3/fix3
     });
   } catch (err: any) {
     logger.error({ err, taskId }, 'LLM generation failed');

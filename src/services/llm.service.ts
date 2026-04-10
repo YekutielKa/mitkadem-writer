@@ -202,10 +202,17 @@ function buildFinalUserMessage(opts: {
   const { brief, enriched, tone, audience, imageBrief } = opts;
   const sections: string[] = [];
 
-  // Brand voice (was in system prompt before, now in user message for attention)
+  // pw3/fix3: brief topic OVERRIDES brand context
+  sections.push('# IMPORTANT: Brief topic vs Brand context');
+  sections.push('The BRIEF below describes WHAT to write about (the TOPIC).');
+  sections.push('Your brand profile describes HOW to write (voice, tone, style).');
+  sections.push('If the brief topic differs from your usual business — FOLLOW THE BRIEF TOPIC.');
+  sections.push('');
+
+  // Brand voice (for tone/style, NOT for topic)
   if (enriched.brand) {
     const b = enriched.brand;
-    sections.push('# Бренд для этого поста');
+    sections.push('# Бренд (голос и тон, НЕ тема)');
     if (b.businessName) sections.push(`Название: ${b.businessName}`);
     if (b.businessType) sections.push(`Тип: ${b.businessType}`);
     if (b.city || b.country) {
@@ -381,6 +388,7 @@ interface GenerateParams {
   image_brief?: string;
   styleArm?: string;
   topicArm?: string;
+  language?: string; // pw3/fix3: explicit language from request
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ export const BriefSchema = z.object({
   styleArm: z.string().optional(),
   topicArm: z.string().optional(),
   constraintsOverride: z.record(z.any()).optional(),
+  language: z.string().optional(), // pw3/fix3: explicit language override
 });
 export type BriefInput = z.infer<typeof BriefSchema>;
 
