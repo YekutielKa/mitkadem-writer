@@ -39,14 +39,19 @@ export const STYLE_ARMS: Record<StyleArmName, ArmConstraints> = {
 
 STRUCTURE: Hook (concrete image) → Payoff (what it means) in under 200 chars total.
 
-GOOD EXAMPLE:
-"Покрытие, которое не сдаётся. Три недели, ежедневные перчатки в Ихилов, ни одного скола."
+REQUIRED:
+- One concrete moment, place, object, or tactile detail
+- Hook that stops the scroll on its own
+- Payoff that reveals what the moment means (implicit, not stated)
 
-BAD EXAMPLE (generic brochure):
-"3-4 недели без сколов — не удача, а результат аппаратного маникюра с авторским дизайном."
+FORBIDDEN:
+- Abstract nouns ("result", "quality", "approach", "technique")
+- "It's not X, it's Y" construction
+- Generic brochure-speak
+- Anything that could fit on a company homepage verbatim
 
-ЗАПРЕЩЕНО: абстракции ("результат техники", "залог стойкости"), конструкция "не X, а Y".
-Используй: конкретный момент, место, объект, тактильную деталь.`,
+The writer has many-shot examples of this style for the target niche.
+Generalize from those examples — do not copy their vocabulary.`,
   },
   educational_long: {
     minChars: 500,
@@ -58,17 +63,22 @@ BAD EXAMPLE (generic brochure):
 
 STRUCTURE:
 1. Myth or common misconception (1-2 sentences)
-2. The surprising truth with SPECIFIC technical details (numbers, brands, measurements)
-3. Vivid metaphor that makes the technical accessible
+2. The surprising truth with SPECIFIC technical details — numbers, brands, measurements, timings
+3. Vivid metaphor that makes the technical accessible to a layperson
 4. Empowering takeaway for the reader (not a sales pitch)
 
-GOOD EXAMPLE:
-"Все думают что для долгого маникюра главное — гель-лак. Это неправда. Самый стойкий маникюр зависит от того что происходит за 4 минуты ДО нанесения — матировка 240 грит, обезжиривание двукратное. Дорогой гель-лак на плохой подготовке — это обои на сырой стене."
+REQUIRED:
+- Concrete numbers (time, size, count, percentage)
+- Named materials, techniques, or tools (not generic categories)
+- One grounding metaphor that a 10-year-old could understand
 
-BAD EXAMPLE:
-"Аппаратная техника позволяет работать максимально аккуратно. Вместе с профессиональной базой покрытие сохраняет блеск и прочность на долгий срок."
+FORBIDDEN:
+- Generic descriptors ("professional", "maximally careful", "premium quality")
+- Abstract benefits without mechanism ("lasts longer", "looks better")
+- Sales-pitch endings ("book now for best results")
 
-ЗАПРЕЩЕНО: "профессиональная база", "максимально аккуратно", "сохраняет блеск". Назови КОНКРЕТНЫЙ материал, КОНКРЕТНУЮ технику, КОНКРЕТНОЕ время.`,
+The writer has many-shot examples of this style for the target niche.
+Generalize the structure, not the subject matter.`,
   },
   question_hook: {
     minChars: 250,
@@ -76,21 +86,25 @@ BAD EXAMPLE:
     emoji: 'optional',
     cta: 'required',
     hookStyle: 'must open with a provocative or uncomfortable question',
-    description: `Medium length. First sentence = question that makes reader STOP and think. Not a rhetorical "Знаете почему" — a real uncomfortable question.
+    description: `Medium length. First sentence = question that makes reader STOP and think. Not a rhetorical "Do you know why" — a real uncomfortable question.
 
 STRUCTURE:
-1. Question that challenges (1 sentence)
-2. Surprising answer with NUMBERS (2-3 sentences)
-3. Concrete proof or example
-4. Specific CTA ("напиши слово X в Direct")
+1. Question that challenges the reader personally (1 sentence)
+2. Surprising answer with concrete NUMBERS (2-3 sentences)
+3. Proof, example, or evidence
+4. Specific, actionable CTA
 
-GOOD EXAMPLE:
-"Сколько раз в этом году ты переделывала маникюр потому что он не дожил до следующей записи? Среднее число у моих новых клиенток: 7 раз за полгода. Это около 1400 шекелей в год."
+REQUIRED:
+- Question that forces the reader to count, remember, or feel discomfort
+- Numbers in the answer (money spent, hours wasted, frequency, percentage)
+- Ending CTA with a specific verb and object
 
-BAD EXAMPLE:
-"Знаете, почему маникюр часто не держится? Всё дело в технике и материалах."
+FORBIDDEN:
+- Rhetorical openers ("Do you know why", "Ever wondered", "Have you noticed")
+- Questions with obvious answers
+- Vague CTAs ("learn more", "contact us")
 
-ЗАПРЕЩЕНО: "Знаете почему/что/как" — это банальный hook. Начни с вопроса который ЗАСТАВЛЯЕТ считать, вспоминать, чувствовать дискомфорт.`,
+The writer has many-shot examples of this style for the target niche.`,
   },
   testimonial: {
     minChars: 300,
@@ -101,18 +115,23 @@ BAD EXAMPLE:
     description: `Client story. Opens with VERBATIM quote. Client has a NAME, PROFESSION, SPECIFIC situation.
 
 STRUCTURE:
-1. Direct quote from client (in «кавычках» or "quotes") — first sentence
-2. Who this person is (profession, life context — NOT "одна клиентка")
-3. What specifically was done (technique, materials, timeline)
+1. Direct quote from client (in "quotes" or «guillemets») — first sentence
+2. Who this person is (name, profession, life context — never "one of our clients")
+3. What specifically was done (named technique, materials, timeline)
 4. Human moment at the end (humor, emotion, ongoing relationship)
 
-GOOD EXAMPLE:
-"«Я кажется впервые за пять лет не помню когда делала ногти». Алина — медсестра в Ихилов, 12 часов в перчатках. Мы попробовали трёхслойную базу Kodi с просушкой между слоями. Сейчас она пишет раз в месяц — проверяет что я не зазналась."
+REQUIRED:
+- First-person client quote as the opening
+- Named individual with profession or life situation
+- Specific measurable detail about the work done
+- Human, not-corporate closing (a joke, an ongoing dynamic, a small moment)
 
-BAD EXAMPLE:
-"«Мой маникюр держится уже 3 недели» — так говорит наша клиентка. Аппаратная техника и трёхслойное нанесение дают стойкий результат."
+FORBIDDEN:
+- "One of our clients", "a customer said", or any anonymized framing
+- Generic testimonial phrasing ("amazing results", "highly recommend")
+- Endings that read like a sales pitch
 
-ЗАПРЕЩЕНО: "наша клиентка", "одна из клиенток" — дай ИМЯ и ПРОФЕССИЮ. "Стойкий результат" — абстракция, назови конкретный срок и ситуацию.`,
+The writer has many-shot examples of this style for the target niche.`,
   },
   before_after: {
     minChars: 250,
@@ -120,59 +139,57 @@ BAD EXAMPLE:
     emoji: 'optional',
     cta: 'required',
     hookStyle: 'single person transformation story with timeline',
-    description: `Transformation of ONE specific person over TIME. Not formula "до: X, после: Y" — a story with milestones.
+    description: `Transformation of ONE specific person over TIME. Not the formula "before: X, after: Y" — a story with milestones.
 
 STRUCTURE:
 1. Person's name + situation BEFORE (specific problem, profession, emotion)
-2. Timeline with milestones (first visit, 3 weeks later, 2 months later)
-3. Specific measurable change (not "сияние", but "ногти отросли на 1.5мм")
-4. Empowering close (if you think it's impossible — she thought so too)
+2. Timeline with real milestones (first visit, three weeks, two months, half a year)
+3. Specific measurable change (numbers, not adjectives)
+4. Empowering close that invites the reader to see themselves in the story
 
-GOOD EXAMPLE:
-"Маша пришла в феврале. Хайтек, презентации каждую среду, ногти 2мм — грызла. Первый визит — восстанавливающее покрытие без иллюзий. Через три недели ногти +1.5мм. К маю — нормальная длина. К июлю — попросила дизайн."
+REQUIRED:
+- A named individual (not "a client")
+- At least two time markers in the progression
+- At least one measurable, concrete change (size, number, frequency)
+- Emotional arc from struggle to confidence
 
-BAD EXAMPLE:
-"До: сколы и потёртости. После: ровное покрытие и сияние без потерь."
+FORBIDDEN:
+- "Before / After" formula without narrative
+- Adjective-only descriptions of change ("better", "amazing", "transformed")
+- Anonymous or composite clients
 
-ЗАПРЕЩЕНО: формула "До/После" без истории. Должна быть КОНКРЕТНАЯ история ОДНОГО человека с ВРЕМЕННОЙ шкалой.`,
+The writer has many-shot examples of this style for the target niche.`,
   },
   tip_short: {
     maxChars: 300,
     emoji: 'optional',
     hashtags: { max: 0 },
     cta: 'forbidden',
-    description: `Tip = actionable знание которое читатель применит САМ, БЕСПЛАТНО, ДОМА. Это НЕ описание услуги. Это НЕ реклама. Это полезный FACT.
+    description: `A tip is actionable knowledge the reader applies THEMSELVES, FOR FREE, AT HOME. It is NOT a service description. It is NOT an ad. It is a useful FACT.
 
-ОБЯЗАТЕЛЬНАЯ СТРУКТУРА:
-1. Конкретный technical fact (одна строка)
-2. КАК этот fact работает физически/химически (объяснение)
-3. ЧТО конкретно делать читателю (action item)
+REQUIRED STRUCTURE:
+1. Concrete technical fact (one line)
+2. HOW this fact works physically, chemically, or mechanically (brief explanation)
+3. WHAT the reader should actually do (specific action item)
 
-ПРАВИЛЬНЫЙ TIP:
-"Гель-лак трескается чаще не от носки, а от перепада температур. Горячая вода при мытье посуды → холодные руки на воздухе → микротрещины в покрытии. Перчатки при мытье — самое скучное что ты можешь сделать для маникюра. И самое эффективное."
+REQUIRED:
+- The tip must be useful even if the reader never becomes a customer
+- Named mechanism (temperature, chemistry, technique) behind the fact
+- Clear action the reader can take today without buying anything
 
-НЕПРАВИЛЬНЫЙ TIP (реклама, не tip):
-"Аппаратный маникюр с авторским градиентом в Marina Nails держится 3-4 недели без сколов. Премиальные материалы гарантируют стойкость."
+FORBIDDEN:
+- Mentioning your own brand, salon, studio, or name
+- Ending with a booking CTA
+- Describing "what we do" or "our service"
+- Generic benefits ("guarantees quality", "premium materials")
+- Textbook-style sentences — write like a knowledgeable friend over coffee
 
-ЗАПРЕЩЕНО:
-❌ Упоминать своё имя/салон/бренд
-❌ Заканчивать призывом записаться
-❌ Описывать "что мы делаем"
-❌ "гарантирует стойкость", "премиальные материалы"
+VOICE:
+- Conversational, warm, slightly cheeky is fine
+- Short sentences, one idea at a time
+- Not a manual, not a lecture, not a brochure
 
-ВИДИШЬ РАЗНИЦУ? Tip = fact + физика + action. Реклама = описание услуги + абстракция.
-Ты пишешь TIP, а не рекламу.
-
-ГОЛОС:
-Ты подруга-эксперт которая делится секретом за кофе.
-НЕ учебник. НЕ инструкция. НЕ "специальная шлифовка создаёт микрошероховатости".
-
-ПРАВИЛЬНЫЙ тон: "Знаешь что реально убивает маникюр? Горячая вода. Серьёзно. Температурный перепад — это микротрещины, а микротрещины — это привет сколы на восьмой день. Перчатки при мытье посуды. Скучно? Да. Работает? Ещё как."
-
-НЕПРАВИЛЬНЫЙ тон: "Гель-лак трескается из-за микроподпиливания ногтя: без качественной аппаратной подготовки слой держится хуже."
-
-Разница: первый — живой человек. Второй — учебник. Пиши как первый.
-Короткие предложения. Разговорный тон. Одна мысль. Можно грубовато. Можно с юмором.`,
+The writer has many-shot examples of this style for the target niche.`,
   },
 }
 
