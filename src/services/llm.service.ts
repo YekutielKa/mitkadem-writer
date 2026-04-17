@@ -552,8 +552,10 @@ export async function generateContent(params: GenerateParams): Promise<Generated
     if (attempt + 1 >= MAX_ARM_ATTEMPTS) {
       logger.warn(
         { arm: armName, violations: lastViolations },
-        '[pw2] arm validation failed after max attempts, accepting anyway',
+        '[pw2] arm validation failed after max attempts — flagging needs_review',
       );
+      result.needsReview = true;
+      result.needsReviewReason = `arm_validation_failed:${lastViolations.slice(0, 3).join('|')}`;
     } else {
       logger.warn({ arm: armName, violations: lastViolations }, '[pw2] arm validation failed, retrying');
     }
@@ -607,27 +609,42 @@ export async function generateContent(params: GenerateParams): Promise<Generated
           // Check if retry actually improved things
           const retrySlopIssues = detectSlop(retryResult.content || '', language);
           const retryHighSeverity = retrySlopIssues.filter((i) => i.severity === 'high');
-          if (retryHighSeverity.length < highSeverity.length) {
+          if (retryHighSeverity.length === 0) {
             logger.info(
-              {
-                before: highSeverity.length,
-                after: retryHighSeverity.length,
-              },
-              '[pw2-slop] retry improved, accepting new result',
+              { before: highSeverity.length, after: 0 },
+              '[pw2-slop] retry cleared all HIGH severity, accepting',
             );
             result = retryResult;
+          } else if (retryHighSeverity.length < highSeverity.length) {
+            logger.warn(
+              { before: highSeverity.length, after: retryHighSeverity.length },
+              '[pw2-slop] retry improved but HIGH severity still present — flagging needs_review',
+            );
+            result = retryResult;
+            result.needsReview = true;
+            result.needsReviewReason = `slop_high_severity:${retryHighSeverity.map((i) => i.pattern).slice(0, 3).join('|')}`;
           } else {
             logger.warn(
               { before: highSeverity.length, after: retryHighSeverity.length },
-              '[pw2-slop] retry did not improve, keeping original',
+              '[pw2-slop] retry did not improve — flagging needs_review',
             );
+            result.needsReview = true;
+            result.needsReviewReason = `slop_high_severity:${highSeverity.map((i) => i.pattern).slice(0, 3).join('|')}`;
           }
         } catch (e) {
-          logger.warn({ error: (e as Error).message }, '[pw2-slop] retry JSON parse failed');
+          logger.warn({ error: (e as Error).message }, '[pw2-slop] retry JSON parse failed — flagging needs_review');
+          result.needsReview = true;
+          result.needsReviewReason = 'slop_retry_parse_failed';
         }
+      } else {
+        logger.warn('[pw2-slop] retry produced no JSON — flagging needs_review');
+        result.needsReview = true;
+        result.needsReviewReason = 'slop_retry_no_json';
       }
     } catch (e: any) {
-      logger.warn({ error: e?.message }, '[pw2-slop] retry HTTP call failed');
+      logger.warn({ error: e?.message }, '[pw2-slop] retry HTTP call failed — flagging needs_review');
+      result.needsReview = true;
+      result.needsReviewReason = 'slop_retry_http_failed';
     }
   } else if (slopIssues.length > 0) {
     // Medium-only or already retried — log but don't block

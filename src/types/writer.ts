@@ -39,6 +39,11 @@ export interface GeneratedPost {
   content: string;
   hashtags: string[];
   image_prompt: string;
+  // Anti-slop (B4): set when all retry attempts exhausted and content still
+  // fails validation. Route marks the task `needs_review` instead of
+  // `pending_approval` so it never auto-publishes.
+  needsReview?: boolean;
+  needsReviewReason?: string;
 }
 
 export interface WriteTaskResult {

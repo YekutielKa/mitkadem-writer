@@ -123,7 +123,7 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
   }).catch(() => {});
 
   // Generate content via LLM
-  let result: { content: string; hashtags: string[]; image_prompt: string };
+  let result: { content: string; hashtags: string[]; image_prompt: string; needsReview?: boolean; needsReviewReason?: string };
   try {
     result = await generateContent({
       tenantId: task.tenantId,
@@ -141,10 +141,20 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
     return;
   }
 
-  // Update task
+  // b3/t09: if anti-slop or arm validation failed after all retries, the writer
+  // flags `needsReview`. The task goes to `needs_review` — operator must
+  // review before anything downstream publishes it.
+  const finalStatus = result.needsReview ? 'needs_review' : 'pending_approval';
+  if (result.needsReview) {
+    logger.warn(
+      { taskId: task.id, reason: result.needsReviewReason },
+      '[b4] writer flagged content needs_review — blocking auto-publish',
+    );
+  }
+
   const updated = await db.writeTask.update({
     where: { id: task.id },
-    data: { status: 'pending_approval', content: result.content },
+    data: { status: finalStatus, content: result.content },
   });
 
   // b2/t02: Persist draft into public.content_posts so pipeline has an anchor
@@ -154,15 +164,19 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
     const platformFromTask = taskPlatform || ((task as unknown as { platform?: string }).platform) || 'instagram';
     const contentArm = styleArm || topicArm || null;
     const imagePrompt = result.image_prompt || null;
+    // b3/t09: if writer flagged needs_review, persist as 'needs_review' so
+    // scorer/publisher never pick it up for auto-scheduling.
+    const contentPostStatus = result.needsReview ? 'needs_review' : 'draft';
     const rows = await db.$queryRawUnsafe<Array<{ id: string }>>(
       `INSERT INTO public.content_posts
          (tenant_id, platform, content_arm, caption, status, image_prompt, image_status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, 'draft', $5, CASE WHEN $5 IS NULL THEN 'skipped' ELSE 'pending' END, NOW(), NOW())
+       VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 IS NULL THEN 'skipped' ELSE 'pending' END, NOW(), NOW())
        RETURNING id::text AS id`,
       task.tenantId,
       platformFromTask,
       contentArm,
       result.content,
+      contentPostStatus,
       imagePrompt,
     );
     contentPostId = rows[0]?.id ?? null;
