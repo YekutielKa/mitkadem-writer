@@ -7,6 +7,13 @@ import { generateContent } from '../services/llm.service';
 import { getHints } from '../services/insights.service';
 import { logEvent } from '../services/events.service';
 import { addToQueue } from '../services/queue.service';
+import {
+  formatBriefQualityContext,
+  lookupBriefQualityForCluster,
+} from '../services/brief-quality-lookup';
+import { getEnv } from '../config/env';
+
+const MITKADEM_SELF_TENANT_UUID = 'e9efe9c9-fca4-4c38-9d68-c551e8bad4ae';
 
 const router = Router();
 
@@ -106,6 +113,33 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
     logger.warn({ error: e }, 'Failed to get hints');
   }
 
+  // BLOCK_30 Sprint 7 — Loop 1 writer-side consumer wire. Best-effort lookup
+  // brief-quality cluster context from public.learning_events (Path B; Phase 0
+  // #15 confirmed writer DB role can SELECT). Layer 1 Mitkadem guard inherited.
+  // Default OFF behind BRIEF_QUALITY_LOOKUP_ENABLED. Graceful skip on null.
+  let briefAugmentation = '';
+  try {
+    const env = getEnv();
+    if (env.BRIEF_QUALITY_LOOKUP_ENABLED && task.tenantId !== MITKADEM_SELF_TENANT_UUID) {
+      const contentArm = styleArm || topicArm || null;
+      const cluster = await lookupBriefQualityForCluster(db, {
+        tenantId: task.tenantId,
+        contentArm,
+        targetLanguage: taskLanguage,
+        platform: taskPlatform,
+      });
+      briefAugmentation = formatBriefQualityContext(cluster, env.BRIEF_QUALITY_MIN_CLUSTER_SAMPLE);
+      if (briefAugmentation) {
+        logger.info(
+          { tenantId: task.tenantId, taskId, clusterKey: cluster?.clusterKey, count: cluster?.count },
+          '[brief-quality-lookup] augmenting prompt with cluster context',
+        );
+      }
+    }
+  } catch (e: any) {
+    logger.warn({ taskId, error: e?.message }, '[brief-quality-lookup] non-blocking failure');
+  }
+
   // Log start event
   logEvent({
     tenantId: task.tenantId,
@@ -125,9 +159,12 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
   // Generate content via LLM
   let result: { content: string; hashtags: string[]; image_prompt: string; needsReview?: boolean; needsReviewReason?: string };
   try {
+    const augmentedBrief = briefAugmentation
+      ? `${task.brief}\n\n[brief-quality context] ${briefAugmentation}`
+      : task.brief;
     result = await generateContent({
       tenantId: task.tenantId,
-      brief: task.brief,
+      brief: augmentedBrief,
       tone: (hints.tone as string) || task.tone || undefined,
       audience: task.audience || undefined,
       // premium-01/task4d: arm-aware generation
