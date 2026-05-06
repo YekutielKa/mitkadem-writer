@@ -93,7 +93,17 @@ router.post('/approve/:taskId', authMiddleware, async (req: Request, res: Respon
   }
 
   // Resolve content_posts row associated with this WriteTask (set by /v1/write/run).
-  const taskWithPost = task as unknown as { contentPostId?: string | null; platform?: string | null; language?: string | null };
+  // contentPostId + platform + language columns are added к WriteTask via raw
+  // ALTER (per writer migration history) and are not declared in the Prisma
+  // schema model — read via raw SQL.
+  const linkRows = await db.$queryRawUnsafe<Array<{ contentPostId: string | null; platform: string | null; language: string | null }>>(
+    `SELECT "contentPostId" AS "contentPostId", platform, language
+       FROM mitkadem_writer."WriteTask"
+      WHERE id = $1::uuid`,
+    task.id,
+  );
+  const link = linkRows[0] ?? { contentPostId: null, platform: null, language: null };
+  const taskWithPost = { contentPostId: link.contentPostId, platform: link.platform, language: link.language };
   const contentPostId = taskWithPost.contentPostId ?? null;
   if (!contentPostId) {
     logger.warn({ taskId: task.id }, '[approve.publish] missing contentPostId — skip publish + return approved');
