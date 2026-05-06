@@ -97,9 +97,9 @@ router.post('/approve/:taskId', authMiddleware, async (req: Request, res: Respon
   // ALTER (per writer migration history) and are not declared in the Prisma
   // schema model — read via raw SQL.
   const linkRows = await db.$queryRawUnsafe<Array<{ contentPostId: string | null; platform: string | null; language: string | null }>>(
-    `SELECT "contentPostId" AS "contentPostId", platform, language
+    `SELECT "contentPostId"::text AS "contentPostId", platform, language
        FROM mitkadem_writer."WriteTask"
-      WHERE id = $1::uuid`,
+      WHERE id = $1`,
     task.id,
   );
   const link = linkRows[0] ?? { contentPostId: null, platform: null, language: null };
