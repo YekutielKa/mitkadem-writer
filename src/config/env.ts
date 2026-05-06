@@ -16,6 +16,8 @@ const envSchema = z.object({
   TENANT_BRAIN_URL: z.string().url().default('https://mitkadem-tenant-brain-production.up.railway.app'),
   INSIGHTS_URL: z.string().url().default('https://mitkadem-insights-production.up.railway.app'),
   EVENTS_URL: z.string().url().default('https://mitkadem-events-production.up.railway.app'),
+  // BLOCK_30 Sprint 4 — adapters-meta synthetic-default publish endpoint base URL.
+  ADAPTERS_META_URL: z.string().url().default('https://mitkadem-adapters-meta-production.up.railway.app'),
 });
 
 export type Env = z.infer<typeof envSchema>;
