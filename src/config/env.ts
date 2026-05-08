@@ -31,6 +31,35 @@ const envSchema = z.object({
     .optional()
     .default('3')
     .transform((v) => Math.max(1, parseInt(v, 10) || 3)),
+  // BLOCK_30.7 Sprint 1 — priors-client retry + circuit breaker reliability
+  // hardening (Sprint 3 NOTE BLOCK_30.5 absorption). Defaults conservative;
+  // tunable post-baseline. Dormant until writer Path B activation flips
+  // BRIEF_QUALITY_LOOKUP_ENABLED — successor block scope.
+  PRIORS_CLIENT_RETRY_MAX_ATTEMPTS: z
+    .string()
+    .optional()
+    .default('3')
+    .transform((v) => Math.max(1, parseInt(v, 10) || 3)),
+  PRIORS_CLIENT_RETRY_BASE_MS: z
+    .string()
+    .optional()
+    .default('100')
+    .transform((v) => Math.max(10, parseInt(v, 10) || 100)),
+  PRIORS_CLIENT_RETRY_MAX_MS: z
+    .string()
+    .optional()
+    .default('2000')
+    .transform((v) => Math.max(10, parseInt(v, 10) || 2000)),
+  PRIORS_CLIENT_BREAKER_FAILURE_THRESHOLD: z
+    .string()
+    .optional()
+    .default('5')
+    .transform((v) => Math.max(1, parseInt(v, 10) || 5)),
+  PRIORS_CLIENT_BREAKER_COOLDOWN_SEC: z
+    .string()
+    .optional()
+    .default('30')
+    .transform((v) => Math.max(1, parseInt(v, 10) || 30)),
 });
 
 export type Env = z.infer<typeof envSchema>;
