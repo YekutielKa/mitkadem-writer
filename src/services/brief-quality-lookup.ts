@@ -21,8 +21,31 @@
  */
 
 import type { PrismaClient } from '@prisma/client';
+import { CircuitBreaker, CircuitBreakerOpenError } from '../lib/circuit-breaker';
+import { retryWithBackoff, RetryExhaustedError } from '../lib/retry';
+import { logger } from '../lib/logger';
+import { getEnv } from '../config/env';
 
 const MITKADEM_SELF_TENANT_UUID = 'e9efe9c9-fca4-4c38-9d68-c551e8bad4ae';
+
+let _breaker: CircuitBreaker | null = null;
+function getBreaker(): CircuitBreaker {
+  if (_breaker) return _breaker;
+  const env = getEnv();
+  _breaker = new CircuitBreaker(
+    {
+      failureThreshold: env.BRIEF_QUALITY_LOOKUP_BREAKER_FAILURE_THRESHOLD,
+      cooldownMs: env.BRIEF_QUALITY_LOOKUP_BREAKER_COOLDOWN_SEC * 1000,
+    },
+    (from, to) => {
+      logger.warn(
+        { component: 'brief-quality-lookup', from, to },
+        'brief-quality-lookup.circuit-breaker state transition',
+      );
+    },
+  );
+  return _breaker;
+}
 
 export interface BriefQualityCluster {
   clusterKey: string;
@@ -61,26 +84,51 @@ export async function lookupBriefQualityForCluster(
   const plat = args.platform ?? 'unknown_platform';
   const clusterKey = `${arm}|${lang}|${plat}`;
 
+  const env = getEnv();
+  const breaker = getBreaker();
+
   try {
-    const rows = await prisma.$queryRawUnsafe<RawLookupRow[]>(
-      `SELECT
-          (input_data->>'clusterKey') AS cluster_key,
-          ((output_data->>'count')::int) AS count,
-          ((output_data->>'mean')::float) AS mean,
-          ((output_data->>'p50')::float) AS p50,
-          ((output_data->>'p80')::float) AS p80,
-          ((output_data->>'postsWithoutSignal')::int) AS posts_without_signal,
-          (output_data->>'assessedAt') AS assessed_at
-         FROM public.learning_events
-        WHERE event_type = 'agent.mb.brief_quality_assessed'
-          AND tenant_id = $1
-          AND tenant_id != $2
-          AND (input_data->>'clusterKey') = $3
-        ORDER BY created_at DESC
-        LIMIT 1`,
-      args.tenantId,
-      MITKADEM_SELF_TENANT_UUID,
-      clusterKey,
+    const rows = await breaker.execute(() =>
+      retryWithBackoff(
+        () =>
+          prisma.$queryRawUnsafe<RawLookupRow[]>(
+            `SELECT
+                (input_data->>'clusterKey') AS cluster_key,
+                ((output_data->>'count')::int) AS count,
+                ((output_data->>'mean')::float) AS mean,
+                ((output_data->>'p50')::float) AS p50,
+                ((output_data->>'p80')::float) AS p80,
+                ((output_data->>'postsWithoutSignal')::int) AS posts_without_signal,
+                (output_data->>'assessedAt') AS assessed_at
+               FROM public.learning_events
+              WHERE event_type = 'agent.mb.brief_quality_assessed'
+                AND tenant_id = $1
+                AND tenant_id != $2
+                AND (input_data->>'clusterKey') = $3
+              ORDER BY created_at DESC
+              LIMIT 1`,
+            args.tenantId,
+            MITKADEM_SELF_TENANT_UUID,
+            clusterKey,
+          ),
+        {
+          maxAttempts: env.BRIEF_QUALITY_LOOKUP_RETRY_MAX_ATTEMPTS,
+          baseMs: env.BRIEF_QUALITY_LOOKUP_RETRY_BASE_MS,
+          maxMs: env.BRIEF_QUALITY_LOOKUP_RETRY_MAX_MS,
+        },
+        (attempt, err) => {
+          logger.warn(
+            {
+              component: 'brief-quality-lookup',
+              tenantId: args.tenantId,
+              clusterKey,
+              attempt,
+              lastErrorMessage: (err as { message?: string } | null)?.message,
+            },
+            'brief-quality-lookup.lookupBriefQualityForCluster retry attempt',
+          );
+        },
+      ),
     );
     if (!rows[0] || !rows[0].cluster_key) return null;
     const r = rows[0];
@@ -93,7 +141,23 @@ export async function lookupBriefQualityForCluster(
       postsWithoutSignal: r.posts_without_signal ?? 0,
       assessedAt: r.assessed_at,
     };
-  } catch {
+  } catch (err: any) {
+    const errorClass =
+      err instanceof CircuitBreakerOpenError
+        ? 'CircuitBreakerOpenError'
+        : err instanceof RetryExhaustedError
+          ? 'RetryExhaustedError'
+          : err?.name || 'Error';
+    logger.warn(
+      {
+        component: 'brief-quality-lookup',
+        tenantId: args.tenantId,
+        clusterKey,
+        errorClass,
+        errorMessage: err?.message,
+      },
+      'brief-quality-lookup.lookupBriefQualityForCluster failed; returning null fallback',
+    );
     return null;
   }
 }
