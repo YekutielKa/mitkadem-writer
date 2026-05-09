@@ -60,6 +60,36 @@ const envSchema = z.object({
     .optional()
     .default('30')
     .transform((v) => Math.max(1, parseInt(v, 10) || 30)),
+  // BLOCK_30.10 Sprint 1 — brief-quality-lookup retry + circuit breaker reliability
+  // hardening (3rd verbatim port; mirror priors-client pattern BLOCK_30.7 Sprint 1).
+  // Defaults conservative; tunable post-baseline. Operates against dormant code path
+  // until BRIEF_QUALITY_LOOKUP_ENABLED=true (D13.8 halt Sprint 8 BLOCK_30.5; future
+  // block decision).
+  BRIEF_QUALITY_LOOKUP_RETRY_MAX_ATTEMPTS: z
+    .string()
+    .optional()
+    .default('3')
+    .transform((v) => Math.max(1, parseInt(v, 10) || 3)),
+  BRIEF_QUALITY_LOOKUP_RETRY_BASE_MS: z
+    .string()
+    .optional()
+    .default('100')
+    .transform((v) => Math.max(10, parseInt(v, 10) || 100)),
+  BRIEF_QUALITY_LOOKUP_RETRY_MAX_MS: z
+    .string()
+    .optional()
+    .default('2000')
+    .transform((v) => Math.max(10, parseInt(v, 10) || 2000)),
+  BRIEF_QUALITY_LOOKUP_BREAKER_FAILURE_THRESHOLD: z
+    .string()
+    .optional()
+    .default('5')
+    .transform((v) => Math.max(1, parseInt(v, 10) || 5)),
+  BRIEF_QUALITY_LOOKUP_BREAKER_COOLDOWN_SEC: z
+    .string()
+    .optional()
+    .default('30')
+    .transform((v) => Math.max(1, parseInt(v, 10) || 30)),
 });
 
 export type Env = z.infer<typeof envSchema>;
