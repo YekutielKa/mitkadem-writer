@@ -63,6 +63,58 @@ function detectLanguage(brief: string, profile: BrandProfile | null): Language {
 const EMOJI_REGEX_GLOBAL =
   /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F0FF}\u{1F100}-\u{1F1FF}]/gu;
 
+// FOUNDATION_FIX Sprint 2 — robust LLM response parser.
+// Why: LLMs frequently wrap JSON output in a markdown code fence (```json … ```).
+// The previous greedy-regex + JSON.parse approach also leaked the raw fence-wrapped
+// string to result.content whenever JSON.parse failed (e.g. truncated output, stray
+// braces in Hebrew/RTL captions), surfacing literal markdown to real Instagram users.
+// `ok=false` signals the caller a fallback occurred so it can break out of retry
+// loops rather than churn on broken structured fields.
+const FENCE_REGEX = /^```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$/i;
+const LEADING_FENCE_REGEX = /^```(?:json)?\s*\n?/i;
+const TRAILING_FENCE_REGEX = /\n?```\s*$/;
+const JSON_OBJECT_REGEX = /\{[\s\S]*\}/;
+
+export function extractPostFromLLMResponse(raw: string): { post: GeneratedPost; ok: boolean } {
+  const empty: GeneratedPost = { content: '', hashtags: [], image_prompt: '' };
+  if (!raw) return { post: empty, ok: false };
+
+  let candidate = raw.trim();
+  const fenceMatch = candidate.match(FENCE_REGEX);
+  if (fenceMatch) {
+    candidate = fenceMatch[1].trim();
+  } else {
+    // Truncated/asymmetric fences (e.g. opening ```json without closing ```)
+    // still leak markdown to the caption if not stripped here.
+    candidate = candidate.replace(LEADING_FENCE_REGEX, '').replace(TRAILING_FENCE_REGEX, '').trim();
+  }
+
+  const objectMatch = candidate.match(JSON_OBJECT_REGEX);
+  const jsonText = objectMatch ? objectMatch[0] : candidate;
+
+  try {
+    const parsed = JSON.parse(jsonText) as Partial<GeneratedPost>;
+    if (parsed && typeof parsed === 'object' && typeof parsed.content === 'string') {
+      const hashtags = Array.isArray(parsed.hashtags)
+        ? parsed.hashtags.filter((h): h is string => typeof h === 'string')
+        : [];
+      const image_prompt = typeof parsed.image_prompt === 'string' ? parsed.image_prompt : '';
+      return { post: { content: parsed.content, hashtags, image_prompt }, ok: true };
+    }
+  } catch (err) {
+    logger.warn(
+      { rawPreview: raw.slice(0, 200), err: (err as Error).message },
+      '[pw2] extractPostFromLLMResponse JSON.parse failed',
+    );
+  }
+
+  logger.warn(
+    { rawPreview: raw.slice(0, 200) },
+    '[pw2] LLM response did not match expected JSON shape — using stripped text as content',
+  );
+  return { post: { content: candidate, hashtags: [], image_prompt: '' }, ok: false };
+}
+
 function enforceArmConstraints(arm: StyleArmName, result: GeneratedPost): void {
   const c = STYLE_ARMS[arm];
 
@@ -520,18 +572,9 @@ export async function generateContent(params: GenerateParams): Promise<Generated
     );
 
     const output = data.output || '';
-    const jsonMatch = output.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      result = { content: output, hashtags: [], image_prompt: '' };
-      break;
-    }
-    try {
-      result = JSON.parse(jsonMatch[0]) as GeneratedPost;
-    } catch (e) {
-      logger.warn({ output: output.slice(0, 200) }, '[pw2] JSON parse failed, using raw output');
-      result = { content: output, hashtags: [], image_prompt: '' };
-      break;
-    }
+    const extracted = extractPostFromLLMResponse(output);
+    result = extracted.post;
+    if (!extracted.ok) break;
 
     if (!armName) break;
 
@@ -599,47 +642,41 @@ export async function generateContent(params: GenerateParams): Promise<Generated
         { timeout: 60000 },
       );
       const retryOutput = retryData.output || '';
-      const retryJsonMatch = retryOutput.match(/\{[\s\S]*\}/);
-      if (retryJsonMatch) {
-        try {
-          const retryResult = JSON.parse(retryJsonMatch[0]) as GeneratedPost;
-          if (armName) {
-            enforceArmConstraints(armName, retryResult);
-          }
-          // Check if retry actually improved things
-          const retrySlopIssues = detectSlop(retryResult.content || '', language);
-          const retryHighSeverity = retrySlopIssues.filter((i) => i.severity === 'high');
-          if (retryHighSeverity.length === 0) {
-            logger.info(
-              { before: highSeverity.length, after: 0 },
-              '[pw2-slop] retry cleared all HIGH severity, accepting',
-            );
-            result = retryResult;
-          } else if (retryHighSeverity.length < highSeverity.length) {
-            logger.warn(
-              { before: highSeverity.length, after: retryHighSeverity.length },
-              '[pw2-slop] retry improved but HIGH severity still present — flagging needs_review',
-            );
-            result = retryResult;
-            result.needsReview = true;
-            result.needsReviewReason = `slop_high_severity:${retryHighSeverity.map((i) => i.pattern).slice(0, 3).join('|')}`;
-          } else {
-            logger.warn(
-              { before: highSeverity.length, after: retryHighSeverity.length },
-              '[pw2-slop] retry did not improve — flagging needs_review',
-            );
-            result.needsReview = true;
-            result.needsReviewReason = `slop_high_severity:${highSeverity.map((i) => i.pattern).slice(0, 3).join('|')}`;
-          }
-        } catch (e) {
-          logger.warn({ error: (e as Error).message }, '[pw2-slop] retry JSON parse failed — flagging needs_review');
+      const retryExtracted = extractPostFromLLMResponse(retryOutput);
+      if (retryExtracted.ok) {
+        const retryResult = retryExtracted.post;
+        if (armName) {
+          enforceArmConstraints(armName, retryResult);
+        }
+        // Check if retry actually improved things
+        const retrySlopIssues = detectSlop(retryResult.content || '', language);
+        const retryHighSeverity = retrySlopIssues.filter((i) => i.severity === 'high');
+        if (retryHighSeverity.length === 0) {
+          logger.info(
+            { before: highSeverity.length, after: 0 },
+            '[pw2-slop] retry cleared all HIGH severity, accepting',
+          );
+          result = retryResult;
+        } else if (retryHighSeverity.length < highSeverity.length) {
+          logger.warn(
+            { before: highSeverity.length, after: retryHighSeverity.length },
+            '[pw2-slop] retry improved but HIGH severity still present — flagging needs_review',
+          );
+          result = retryResult;
           result.needsReview = true;
-          result.needsReviewReason = 'slop_retry_parse_failed';
+          result.needsReviewReason = `slop_high_severity:${retryHighSeverity.map((i) => i.pattern).slice(0, 3).join('|')}`;
+        } else {
+          logger.warn(
+            { before: highSeverity.length, after: retryHighSeverity.length },
+            '[pw2-slop] retry did not improve — flagging needs_review',
+          );
+          result.needsReview = true;
+          result.needsReviewReason = `slop_high_severity:${highSeverity.map((i) => i.pattern).slice(0, 3).join('|')}`;
         }
       } else {
-        logger.warn('[pw2-slop] retry produced no JSON — flagging needs_review');
+        logger.warn('[pw2-slop] retry parse failed — flagging needs_review');
         result.needsReview = true;
-        result.needsReviewReason = 'slop_retry_no_json';
+        result.needsReviewReason = 'slop_retry_parse_failed';
       }
     } catch (e: any) {
       logger.warn({ error: e?.message }, '[pw2-slop] retry HTTP call failed — flagging needs_review');
