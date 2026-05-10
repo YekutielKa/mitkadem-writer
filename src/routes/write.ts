@@ -218,13 +218,20 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
     );
     contentPostId = rows[0]?.id ?? null;
     if (contentPostId) {
-      // Link WriteTask → content_posts for traceability. Best-effort column set
-      // (column may not exist yet — ignore failure).
+      // Link WriteTask → content_posts for traceability. SF6 (FOUNDATION_FIX
+      // Sprint 2.6): cast $1 to uuid — column is uuid, raw param is text;
+      // implicit cast in prepared statements fails silently. Surface failure
+      // via logger.warn so future regressions don't stay invisible.
       await db.$executeRawUnsafe(
-        `UPDATE "WriteTask" SET "contentPostId" = $1 WHERE id = $2`,
+        `UPDATE "WriteTask" SET "contentPostId" = $1::uuid WHERE id = $2`,
         contentPostId,
         task.id,
-      ).catch(() => {});
+      ).catch((e: any) => {
+        logger.warn(
+          { taskId: task.id, contentPostId, error: e?.message },
+          '[b2/t02] WriteTask.contentPostId update failed (non-blocking)',
+        );
+      });
     }
   } catch (e: any) {
     logger.warn({ taskId: task.id, error: e?.message }, '[b2/t02] content_posts insert failed (non-blocking)');
