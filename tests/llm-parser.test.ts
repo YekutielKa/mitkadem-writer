@@ -65,10 +65,12 @@ const cases: Case[] = [
     expectOk: false,
   },
   {
-    name: '7. Malformed JSON (truncated, no closing brace) — fallback returns stripped (no fence)',
+    name: '7. Malformed JSON (truncated, no closing brace) — tertiary recovery extracts content text',
     raw: '```json\n{"content":"truncated mid-string',
-    // No closing fence/brace — fence regex misses, JSON.parse fails on regex match.
-    // Important: fallback content must NOT contain ``` markdown markers.
+    // After leading-fence strip, helper recovers the content field via regex
+    // even though JSON is unclosed. Must NOT leak ``` and must not contain
+    // the literal `"content":` JSON marker.
+    expectContent: 'truncated mid-string',
     expectOk: false,
   },
   {
@@ -100,6 +102,18 @@ const cases: Case[] = [
     raw: '\n\n```json\n{"content":"trimmed","hashtags":[],"image_prompt":""}\n```\n  ',
     expectContent: 'trimmed',
     expectOk: true,
+  },
+  {
+    name: '13. Production truncation case — Hebrew text without closing brace',
+    raw: '{\n  "content": "כשמרינה אמרה לי שהטיפול יחזיק מעמד מעל חודש',
+    expectContent: 'כשמרינה אמרה לי שהטיפול יחזיק מעמד מעל חודש',
+    expectOk: false,
+  },
+  {
+    name: '14. Truncated content with escape sequences (\\n) — recovery preserves them',
+    raw: '{"content":"line1\\nline2\\nline3 cut off',
+    expectContent: 'line1\nline2\nline3 cut off',
+    expectOk: false,
   },
 ];
 

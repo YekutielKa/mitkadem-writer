@@ -74,6 +74,22 @@ const FENCE_REGEX = /^```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$/i;
 const LEADING_FENCE_REGEX = /^```(?:json)?\s*\n?/i;
 const TRAILING_FENCE_REGEX = /\n?```\s*$/;
 const JSON_OBJECT_REGEX = /\{[\s\S]*\}/;
+// Tertiary recovery for LLM-truncated output: extract just the "content"
+// string field even when JSON is unterminated. Captures both the closed-quote
+// case and the truncated-without-quote case.
+const CONTENT_FIELD_REGEX = /"content"\s*:\s*"((?:\\.|[^"\\])*)/;
+
+function recoverContentFromBrokenJson(text: string): string | null {
+  const m = text.match(CONTENT_FIELD_REGEX);
+  if (!m) return null;
+  try {
+    // Wrap the captured body and unescape via JSON.parse so escape sequences
+    // (\n, \", \\, \uXXXX) materialize correctly.
+    return JSON.parse(`"${m[1]}"`);
+  } catch {
+    return null;
+  }
+}
 
 export function extractPostFromLLMResponse(raw: string): { post: GeneratedPost; ok: boolean } {
   const empty: GeneratedPost = { content: '', hashtags: [], image_prompt: '' };
@@ -104,15 +120,47 @@ export function extractPostFromLLMResponse(raw: string): { post: GeneratedPost; 
   } catch (err) {
     logger.warn(
       { rawPreview: raw.slice(0, 200), err: (err as Error).message },
-      '[pw2] extractPostFromLLMResponse JSON.parse failed',
+      '[pw2] extractPostFromLLMResponse JSON.parse failed — attempting tertiary recovery',
     );
   }
 
+  // Tertiary fallback: regex-extract the content field even from malformed/truncated JSON.
+  // This salvages the most-common LLM failure mode (max_tokens hit mid-string) without
+  // surfacing literal {"content":"…"} or ```json wrappers to the caller.
+  const recovered = recoverContentFromBrokenJson(candidate);
+  if (recovered) {
+    logger.warn(
+      { rawPreview: raw.slice(0, 200), recoveredLen: recovered.length },
+      '[pw2] recovered content via tertiary regex extraction (LLM output likely truncated)',
+    );
+    return {
+      post: {
+        content: recovered,
+        hashtags: [],
+        image_prompt: '',
+        needsReview: true,
+        needsReviewReason: 'parser_recovered_from_malformed_json',
+      },
+      ok: false,
+    };
+  }
+
+  // Last-resort fallback: surface stripped text. Mark needsReview so this never
+  // auto-publishes — the LLM clearly did not produce the expected schema.
   logger.warn(
     { rawPreview: raw.slice(0, 200) },
-    '[pw2] LLM response did not match expected JSON shape — using stripped text as content',
+    '[pw2] LLM response did not match expected JSON shape — using stripped text as content (needsReview)',
   );
-  return { post: { content: candidate, hashtags: [], image_prompt: '' }, ok: false };
+  return {
+    post: {
+      content: candidate,
+      hashtags: [],
+      image_prompt: '',
+      needsReview: true,
+      needsReviewReason: 'parser_no_json_match',
+    },
+    ok: false,
+  };
 }
 
 function enforceArmConstraints(arm: StyleArmName, result: GeneratedPost): void {
