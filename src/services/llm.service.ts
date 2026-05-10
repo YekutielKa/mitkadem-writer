@@ -23,6 +23,12 @@ import { getAntiSlopBlock } from '../knowledge/anti-slop';
 import { buildHighBarFraming } from '../knowledge/audience-framing';
 import { detectSlop, formatSlopRetryMessage, type SlopIssue } from './slop-detector';
 import { sanitizeImagePromptLanguage } from './image-prompt-sanitizer';
+import { validateBrandCoherence } from '../lib/brand-coherence-validator';
+
+// FOUNDATION_FIX Sprint 5 — Mitkadem self-tenant skip-guard for brand-coherence
+// validator. Self-tenant must NEVER be inspected/written by validator emit
+// (DEC absolute; preserves byte-identical invariant).
+const MITKADEM_SELF_TENANT_ID = 'e9efe9c9-fca4-4c38-9d68-c551e8bad4ae';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Brand profile loader
@@ -34,11 +40,39 @@ export async function loadBrandProfile(tenantId: string): Promise<BrandProfile |
     const profile = await httpGet<BrandProfile>(url, {
       Authorization: `Bearer ${signServiceToken()}`,
     });
+    // FOUNDATION_FIX Sprint 5 — defensive coherence check (non-blocking).
+    // Skip Mitkadem self-tenant; emit warning event when issues > 0.
+    if (profile && tenantId !== MITKADEM_SELF_TENANT_ID) {
+      try {
+        const coherence = validateBrandCoherence(profile);
+        if (!coherence.coherent) {
+          emitBrandCoherenceWarning(tenantId, coherence.issues, 'loadBrandProfile').catch(() => {
+            // emit failure must NEVER block the load-path
+          });
+        }
+      } catch (e: any) {
+        logger.warn({ tenantId, error: e?.message }, '[brand-coherence] validator threw (non-blocking)');
+      }
+    }
     return profile;
   } catch (err: any) {
     logger.warn({ tenantId, error: err.message }, 'Failed to load brand profile');
     return null;
   }
+}
+
+async function emitBrandCoherenceWarning(
+  tenantId: string,
+  issues: ReturnType<typeof validateBrandCoherence>['issues'],
+  loadSite: string,
+): Promise<void> {
+  const db = getPrisma();
+  await db.$executeRawUnsafe(
+    `INSERT INTO public.learning_events (id, tenant_id, source, event_type, input_data, output_data, outcome, severity, created_at)
+     VALUES (gen_random_uuid()::text, $1, 'writer', 'agent.writer.brand_coherence_warning', $2::jsonb, NULL, 'neutral', 'warn', NOW())`,
+    tenantId,
+    JSON.stringify({ issues, loadSite }),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
