@@ -207,7 +207,7 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
     const rows = await db.$queryRawUnsafe<Array<{ id: string }>>(
       `INSERT INTO public.content_posts
          (tenant_id, platform, content_arm, caption, status, image_prompt, image_status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 IS NULL THEN 'skipped' ELSE 'pending' END, NOW(), NOW())
+       VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6::text IS NULL THEN 'skipped' ELSE 'pending' END, NOW(), NOW())
        RETURNING id::text AS id`,
       task.tenantId,
       platformFromTask,
