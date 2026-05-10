@@ -22,6 +22,7 @@ import {
 import { getAntiSlopBlock } from '../knowledge/anti-slop';
 import { buildHighBarFraming } from '../knowledge/audience-framing';
 import { detectSlop, formatSlopRetryMessage, type SlopIssue } from './slop-detector';
+import { sanitizeImagePromptLanguage } from './image-prompt-sanitizer';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Brand profile loader
@@ -114,7 +115,15 @@ export function extractPostFromLLMResponse(raw: string): { post: GeneratedPost; 
       const hashtags = Array.isArray(parsed.hashtags)
         ? parsed.hashtags.filter((h): h is string => typeof h === 'string')
         : [];
-      const image_prompt = typeof parsed.image_prompt === 'string' ? parsed.image_prompt : '';
+      const rawImagePrompt = typeof parsed.image_prompt === 'string' ? parsed.image_prompt : '';
+      const { sanitized: image_prompt, mutated: imagePromptMutated } =
+        sanitizeImagePromptLanguage(rawImagePrompt);
+      if (imagePromptMutated) {
+        logger.warn(
+          { rawPreview: rawImagePrompt.slice(0, 120), cleanedPreview: image_prompt.slice(0, 120) },
+          '[pw2] image_prompt language sanitized (RU/HE → EN)',
+        );
+      }
       return { post: { content: parsed.content, hashtags, image_prompt }, ok: true };
     }
   } catch (err) {
@@ -253,6 +262,12 @@ A premium caption describes CONCRETE things in CONCRETE words. Numbers, names, o
   sections.push(`# Image prompt rules (Gemini/Imagen)
 
 The image_prompt field is a prompt for AI image generation. It must be detailed:
+
+LANGUAGE RULE (CRITICAL):
+The image_prompt MUST be entirely in English, regardless of the caption's language. If the brand's businessType / niche / services contain non-English terms, translate them to English BEFORE composing the image_prompt:
+- "косметология" → "cosmetology"; "тату"/"татуаж" → "tattoo"/"permanent makeup"; "маникюр" → "manicure"; "педикюр" → "pedicure"; "парикмахер" → "hair salon"; "массаж" → "massage"; "пилинг" → "peeling"; "брови" → "brows"; "ресницы" → "lashes"
+- Hebrew "מספרה" → "hair salon"; "קוסמטיקה" → "cosmetology"; "מניקור" → "manicure"; "איפור" → "makeup"; "קעקוע" → "tattoo"
+The image_prompt MUST contain ZERO Cyrillic and ZERO Hebrew characters. ASCII / Latin only.
 
 REQUIRED ELEMENTS:
 1. "Photorealistic" — ALWAYS the first word
