@@ -24,6 +24,13 @@ import { buildHighBarFraming } from '../knowledge/audience-framing';
 import { detectSlop, formatSlopRetryMessage, type SlopIssue } from './slop-detector';
 import { sanitizeImagePromptLanguage } from './image-prompt-sanitizer';
 import { validateBrandCoherence } from '../lib/brand-coherence-validator';
+// Sprint 26 — hashtag city-niche guardrail (closes Sprint 23 finding #7 partial).
+import {
+  getHashtagAllowlistForCity,
+  filterHashtags,
+  renderAllowlistHint,
+  type HashtagAllowlist,
+} from './hashtag-allowlist';
 
 // FOUNDATION_FIX Sprint 5 — Mitkadem self-tenant skip-guard for brand-coherence
 // validator. Self-tenant must NEVER be inspected/written by validator emit
@@ -255,8 +262,9 @@ function buildSystemPrompt(opts: {
   brand: BrandProfile | null;
   language: Language;
   armName: StyleArmName | null;
+  hashtagAllowlist?: HashtagAllowlist;
 }): string {
-  const { tenantId, brand, language, armName } = opts;
+  const { tenantId, brand, language, armName, hashtagAllowlist } = opts;
 
   const sections: string[] = [];
 
@@ -316,7 +324,15 @@ REQUIRED ELEMENTS:
 FORBIDDEN: multiple pairs of hands (unless master+client process), illogical object combinations, unrealistic finger poses, text on image.`);
   sections.push('');
 
-  // 7. Output format
+  // 7. Hashtag allowlist (Sprint 26 — closes Sprint 23 finding #7 partial).
+  //    Pre-LLM hint that bounds the hashtag-generation distribution. Post-filter
+  //    is the empirical defense (see filterHashtags after LLM call).
+  if (hashtagAllowlist) {
+    sections.push(renderAllowlistHint(hashtagAllowlist));
+    sections.push('');
+  }
+
+  // 8. Output format
   sections.push(`# Output format
 
 Return ONLY valid JSON with this exact structure (no markdown wrapping, no preamble):
@@ -492,15 +508,16 @@ function buildMessages(opts: {
   tone?: string;
   audience?: string;
   imageBrief?: string;
+  hashtagAllowlist?: HashtagAllowlist;
 }): LLMMessage[] {
-  const { tenantId, brief, enriched, brand, language, armName, tone, audience, imageBrief } = opts;
+  const { tenantId, brief, enriched, brand, language, armName, tone, audience, imageBrief, hashtagAllowlist } = opts;
 
   const messages: LLMMessage[] = [];
 
   // 1. System prompt
   messages.push({
     role: 'system',
-    content: buildSystemPrompt({ tenantId, brand, language, armName }),
+    content: buildSystemPrompt({ tenantId, brand, language, armName, hashtagAllowlist }),
   });
 
   // 2. Many-shot reference examples — conversation history
@@ -602,6 +619,12 @@ export async function generateContent(params: GenerateParams): Promise<Generated
     };
   }
 
+  // Sprint 26 — hashtag allowlist sourced from BrandProfile.city. Used for
+  // pre-LLM hint (in system prompt) и post-LLM filtering (after generation).
+  const hashtagAllowlist: HashtagAllowlist | undefined = profile
+    ? getHashtagAllowlistForCity(profile.city ?? null)
+    : undefined;
+
   // 4. Build many-shot conversation
   const messages = buildMessages({
     tenantId: params.tenantId || '',
@@ -613,6 +636,7 @@ export async function generateContent(params: GenerateParams): Promise<Generated
     tone: params.tone,
     audience: params.audience,
     imageBrief: params.image_brief,
+    hashtagAllowlist,
   });
 
   logger.info(
@@ -790,6 +814,52 @@ export async function generateContent(params: GenerateParams): Promise<Generated
       },
       '[pw2-slop] medium-severity slop detected (logged, not blocking)',
     );
+  }
+
+  // ── Sprint 26 — hashtag post-LLM filter ──────────────────────────────────
+  // Closes Sprint 23 finding #7 partial (#маникюрашкелон city-niche LLM-conflation
+  // for Rishon-LeZion business). Forbidden conflations rejected; geo-neutral
+  // niche-only tags + tenant-own-city tags accepted. On all-rejected → emit
+  // `hashtag_generation_blocked` learning_event + fall back к geo-neutral subset.
+  if (hashtagAllowlist && Array.isArray(result.hashtags) && result.hashtags.length > 0) {
+    const filter = filterHashtags(result.hashtags, hashtagAllowlist);
+    if (filter.rejected.length > 0) {
+      logger.warn(
+        {
+          tenantId: params.tenantId,
+          rejected: filter.rejected.slice(0, 10),
+          accepted: filter.accepted,
+          fallbackTriggered: filter.fallbackTriggered,
+        },
+        '[pw2-hashtag] hashtags rejected by allowlist (Sprint 26 city-niche guardrail)',
+      );
+      if (filter.fallbackTriggered && filter.fallbackTags) {
+        try {
+          const db = getPrisma();
+          await db.$executeRawUnsafe(
+            `INSERT INTO public.learning_events (id, tenant_id, source, event_type, input_data, output_data, outcome, severity, created_at)
+             VALUES (gen_random_uuid()::text, $1, 'writer', 'hashtag_generation_blocked', $2::jsonb, NULL, 'negative', 'warn', NOW())`,
+            params.tenantId ?? null,
+            JSON.stringify({
+              rejected: filter.rejected,
+              fallbackTags: filter.fallbackTags,
+              tenantCity: hashtagAllowlist.city,
+              reason: 'all_candidates_rejected_by_allowlist',
+            }),
+          );
+        } catch (e: any) {
+          logger.warn(
+            { error: e?.message, tenantId: params.tenantId },
+            '[pw2-hashtag] hashtag_generation_blocked emit failed (non-fatal)',
+          );
+        }
+        result.hashtags = filter.fallbackTags;
+      } else {
+        result.hashtags = filter.accepted;
+      }
+    } else {
+      result.hashtags = filter.accepted;
+    }
   }
 
   return result;
