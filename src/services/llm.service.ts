@@ -688,7 +688,12 @@ export async function generateContent(params: GenerateParams): Promise<Generated
         maxTokens: 1500,
         temperature: 0.85,
       },
-      { Authorization: `Bearer ${signServiceToken()}` },
+      {
+        Authorization: `Bearer ${signServiceToken()}`,
+        'x-caller-service': 'writer',
+        ...(params.tenantId ? { 'x-tenant-id': params.tenantId } : {}),
+        'x-activity': 'content_generation',
+      },
       { timeout: 60000 },
     );
 
