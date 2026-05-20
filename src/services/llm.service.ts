@@ -85,7 +85,18 @@ async function emitBrandCoherenceWarning(
 // ─────────────────────────────────────────────────────────────────────────────
 // Language detection — rough heuristic from brand profile + brief content
 // ─────────────────────────────────────────────────────────────────────────────
-function detectLanguage(brief: string, profile: BrandProfile | null): Language {
+function detectLanguage(brief: string, profile: BrandProfile | null, explicit?: string | null): Language {
+  // Sprint H \u2014 when caller passes explicit language (orchestrator's
+  // multi-locale fan-out per Sprint H commission \u00A71.5), honor it first.
+  // Brief-text + profile fallbacks were the legacy heuristic; they
+  // produced wrong-language ads for masters whose brief had mixed RU/HE
+  // samples but whose target-locale was the country primary.
+  if (explicit) {
+    const e = explicit.toLowerCase();
+    if (e === 'he' || e === 'hebrew' || e === 'iw') return 'he';
+    if (e === 'ru' || e === 'russian') return 'ru';
+    if (e === 'en' || e === 'english') return 'en';
+  }
   // Hebrew script detection
   if (/[\u0590-\u05FF]/.test(brief)) return 'he';
   // Cyrillic detection
@@ -579,7 +590,7 @@ export async function generateContent(params: GenerateParams): Promise<Generated
 
   // 2. Resolve arm + language
   const armName: StyleArmName | null = isStyleArmName(params.styleArm) ? params.styleArm : null;
-  const language = detectLanguage(params.brief, profile);
+  const language = detectLanguage(params.brief, profile, params.language);
 
   // 3. Enrich brief (Module A — anti-rep + audience layers)
   let enriched: EnrichedBrief;
