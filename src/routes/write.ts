@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { getPrisma } from '../lib/prisma';
 import { logger } from '../lib/logger';
 import { authMiddleware } from '../middleware/auth';
 import { BriefSchema, RunSchema } from '../types/writer';
-import { generateContent } from '../services/llm.service';
+import { generateContent, WriterLanguageMismatchUnrecoverableError } from '../services/llm.service';
 import { getHints } from '../services/insights.service';
 import { logEvent } from '../services/events.service';
 import { addToQueue } from '../services/queue.service';
@@ -19,7 +20,28 @@ const router = Router();
 
 // POST /v1/write/brief - Создать задачу на генерацию
 router.post('/brief', authMiddleware, async (req: Request, res: Response) => {
-  const input = BriefSchema.parse(req.body);
+  let input: z.infer<typeof BriefSchema>;
+  try {
+    input = BriefSchema.parse(req.body);
+  } catch (e: any) {
+    // Sprint O Block 2 — translate the language-required Zod issue into a
+    // dedicated HTTP 400 so the ads-launch caller can distinguish the
+    // refusal at the contract boundary from a generic schema fail.
+    if (e instanceof z.ZodError) {
+      const langIssue = e.issues.find((iss) => iss.message === 'language_required');
+      if (langIssue) {
+        res.status(400).json({
+          error: 'language_required',
+          message:
+            'purpose=ads_creative requires explicit language field (ISO 639-1). Sprint O Block 1 contract.',
+        });
+        return;
+      }
+      res.status(400).json({ error: 'invalid_request', details: e.issues });
+      return;
+    }
+    throw e;
+  }
   const db = getPrisma();
 
   const task = await db.writeTask.create({
@@ -35,7 +57,17 @@ router.post('/brief', authMiddleware, async (req: Request, res: Response) => {
   // premium-01/task4d: persist arm fields via raw SQL (Prisma model not regenerated)
   // pw3/fix3: store language alongside arm columns
   // b2/t02: also persist platform so /run can use it when creating content_posts
-  if (input.styleArm || input.topicArm || input.constraintsOverride || input.language || input.platform) {
+  // Sprint O Block 2 — also persist purpose so /run can engage the
+  // script-coherence retry. Column was added 2026-05-21 via plain
+  // ALTER TABLE; Prisma model not regenerated yet so raw SQL.
+  if (
+    input.styleArm ||
+    input.topicArm ||
+    input.constraintsOverride ||
+    input.language ||
+    input.platform ||
+    input.purpose
+  ) {
     try {
       await db.$executeRawUnsafe(
         `UPDATE "WriteTask"
@@ -43,13 +75,15 @@ router.post('/brief', authMiddleware, async (req: Request, res: Response) => {
                 "topicArm" = $2,
                 "constraints" = $3::jsonb,
                 "language" = $4,
-                "platform" = $5
-          WHERE id = $6`,
+                "platform" = $5,
+                "purpose" = $6
+          WHERE id = $7`,
         input.styleArm ?? null,
         input.topicArm ?? null,
         input.constraintsOverride ? JSON.stringify(input.constraintsOverride) : null,
         input.language ?? null,
         input.platform ?? null,
+        input.purpose ?? null,
         task.id,
       );
     } catch (e: any) {
@@ -79,13 +113,15 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
   }
 
   // premium-01/task4d: read arm fields via raw SQL (Prisma model not regenerated)
+  // Sprint O Block 2 — also read `purpose` to drive the script-coherence retry.
   let styleArm: string | null = null;
   let topicArm: string | null = null;
   let taskLanguage: string | null = null;
   let taskPlatform: string | null = null;
+  let taskPurpose: string | null = null;
   try {
-    const rows = await db.$queryRawUnsafe<Array<{ styleArm: string | null; topicArm: string | null; language: string | null; platform: string | null }>>(
-      `SELECT "styleArm", "topicArm", "language", "platform" FROM "WriteTask" WHERE id = $1`,
+    const rows = await db.$queryRawUnsafe<Array<{ styleArm: string | null; topicArm: string | null; language: string | null; platform: string | null; purpose: string | null }>>(
+      `SELECT "styleArm", "topicArm", "language", "platform", "purpose" FROM "WriteTask" WHERE id = $1`,
       taskId,
     );
     if (rows[0]) {
@@ -97,6 +133,9 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
   }
   if (rows[0] && (rows[0] as any).platform) {
     taskPlatform = (rows[0] as any).platform;
+  }
+  if (rows[0] && (rows[0] as any).purpose) {
+    taskPurpose = (rows[0] as any).purpose;
   }
   } catch (e: any) {
     logger.warn({ taskId, error: e?.message }, '[task4d] failed to read arm fields (non-blocking)');
@@ -171,8 +210,40 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
       styleArm: styleArm || undefined,
       topicArm: topicArm || undefined,
       language: taskLanguage || undefined, // pw3/fix3
+      // Sprint O Block 2 — drives post-generation script-coherence retry.
+      purpose: taskPurpose || undefined,
     });
   } catch (err: any) {
+    // Sprint O Block 2 — refuse-don't-guess at the writer boundary.
+    if (err instanceof WriterLanguageMismatchUnrecoverableError) {
+      logger.error(
+        { taskId, attempts: err.attempts, expectedLang: err.expectedLang, expectedScript: err.expectedScript, detected: err.detected },
+        '[sprint-o] writer_language_mismatch_unrecoverable — returning 422',
+      );
+      // Mark the task itself so the orchestrator's storage view shows it
+      // didn't silently succeed.
+      try {
+        await db.writeTask.update({
+          where: { id: task.id },
+          data: { status: 'language_mismatch_unrecoverable' },
+        });
+      } catch (e: any) {
+        logger.warn({ taskId, error: e?.message }, '[sprint-o] failed to mark WriteTask status (non-fatal)');
+      }
+      res.status(422).json({
+        error: 'writer_language_mismatch_unrecoverable',
+        message: err.message,
+        attempts: err.attempts,
+        expectedLang: err.expectedLang,
+        expectedScript: err.expectedScript,
+        detected: {
+          script: err.detected.script,
+          confidence: err.detected.confidence,
+          counts: err.detected.counts,
+        },
+      });
+      return;
+    }
     logger.error({ err, taskId }, 'LLM generation failed');
     res.status(500).json({ error: 'llm_generation_failed', details: err?.message });
     return;

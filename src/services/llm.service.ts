@@ -24,6 +24,15 @@ import { buildHighBarFraming } from '../knowledge/audience-framing';
 import { detectSlop, formatSlopRetryMessage, type SlopIssue } from './slop-detector';
 import { sanitizeImagePromptLanguage } from './image-prompt-sanitizer';
 import { validateBrandCoherence } from '../lib/brand-coherence-validator';
+// Sprint O Block 2 — script-coherence detector. Used to verify Opus output
+// matches the orchestrator-supplied target-audience language; mismatch
+// triggers up to 2 dedicated retries with explicit correction (then 422).
+import {
+  detectDominantScript,
+  langToScript,
+  langFullNameRu,
+  type ScriptDetection,
+} from '../lib/script-detector';
 // Sprint 26 — hashtag city-niche guardrail (closes Sprint 23 finding #7 partial).
 import {
   getHashtagAllowlistForCity,
@@ -80,6 +89,61 @@ async function emitBrandCoherenceWarning(
     tenantId,
     JSON.stringify({ issues, loadSite }),
   );
+}
+
+// Sprint O Block 2 — emit a writer script-coherence learning_event.
+// Never throws; emit-path failure must NOT mask the underlying script
+// state (the caller's flow decides retry vs. throw separately).
+type WriterScriptEventType =
+  | 'writer_script_check_passed'
+  | 'writer_script_mismatch_retry'
+  | 'writer_language_mismatch_unrecoverable';
+async function emitWriterScriptEvent(
+  tenantId: string | null | undefined,
+  eventType: WriterScriptEventType,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const db = getPrisma();
+    const outcome = eventType === 'writer_script_check_passed' ? 'positive' : 'negative';
+    const severity = eventType === 'writer_language_mismatch_unrecoverable' ? 'error'
+      : eventType === 'writer_script_mismatch_retry' ? 'warn'
+      : 'info';
+    await db.$executeRawUnsafe(
+      `INSERT INTO public.learning_events (id, tenant_id, source, event_type, input_data, output_data, outcome, severity, created_at)
+       VALUES (gen_random_uuid()::text, $1, 'writer', $2, $3::jsonb, NULL, $4, $5, NOW())`,
+      tenantId ?? null,
+      eventType,
+      JSON.stringify(payload),
+      outcome,
+      severity,
+    );
+  } catch (e: any) {
+    logger.warn({ tenantId, eventType, error: e?.message }, '[sprint-o] writer script event emit failed (non-blocking)');
+  }
+}
+
+// Sprint O Block 2 — typed error so the route handler can map to HTTP 422.
+export class WriterLanguageMismatchUnrecoverableError extends Error {
+  readonly code = 'writer_language_mismatch_unrecoverable';
+  readonly attempts: number;
+  readonly expectedLang: string;
+  readonly expectedScript: string;
+  readonly detected: ScriptDetection;
+  constructor(opts: {
+    attempts: number;
+    expectedLang: string;
+    expectedScript: string;
+    detected: ScriptDetection;
+  }) {
+    super(
+      `writer_language_mismatch_unrecoverable: expected=${opts.expectedScript} detected=${opts.detected.script} attempts=${opts.attempts}`,
+    );
+    this.attempts = opts.attempts;
+    this.expectedLang = opts.expectedLang;
+    this.expectedScript = opts.expectedScript;
+    this.detected = opts.detected;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -278,6 +342,34 @@ function buildSystemPrompt(opts: {
   const { tenantId, brand, language, armName, hashtagAllowlist } = opts;
 
   const sections: string[] = [];
+
+  // 0. Sprint O Block 2 — language directive FIRST. Opus pays the most
+  //    attention to the first instruction; pre-Sprint-O this directive
+  //    lived deep in the final user message and Opus drifted to the
+  //    brief body's dominant script (e.g. Hebrew copy reaching a Russian
+  //    AdSet). Restated in Russian (operator language) so it survives
+  //    translation in the LLM's internal reasoning trace.
+  const langRu = langFullNameRu(language);
+  const langScript = langToScript(language);
+  const langScriptRu =
+    langScript === 'cyrillic' ? 'кириллица'
+    : langScript === 'hebrew' ? 'иврит (еврейское письмо)'
+    : langScript === 'arabic' ? 'арабская вязь'
+    : 'латиница';
+  sections.push(
+    [
+      `ОБЯЗАТЕЛЬНО — ВЕСЬ ВЫХОД ТОЛЬКО НА ЯЗЫКЕ: ${langRu} (ISO 639-1 = ${language}; письменность: ${langScriptRu}).`,
+      '',
+      'НЕ смешивай языки. НЕ используй слова или фразы на других языках в полях content и hashtags.',
+      'Если master picture / brand profile / brief написаны на другом языке — переведи смысл, не копируй текст дословно.',
+      '',
+      `Язык целевой аудитории (target audience language): ${language}`,
+      'Язык мастера может отличаться от языка целевой аудитории. Следуй target audience language.',
+      '',
+      'Исключение только одно: поле image_prompt — всегда на английском (см. раздел Image prompt rules).',
+    ].join('\n'),
+  );
+  sections.push('');
 
   // 1. Role + identity
   sections.push(
@@ -574,6 +666,11 @@ interface GenerateParams {
   styleArm?: string;
   topicArm?: string;
   language?: string; // pw3/fix3: explicit language from request
+  // Sprint O Block 2 — caller signals the creative purpose so the writer
+  // knows which downstream checks to enforce. 'ads_creative' enables the
+  // post-generation script-coherence retry loop (max 2 retries, then 422).
+  // Absent / other values skip the gate (preserves intro/content paths).
+  purpose?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -875,6 +972,148 @@ export async function generateContent(params: GenerateParams): Promise<Generated
       }
     } else {
       result.hashtags = filter.accepted;
+    }
+  }
+
+  // ── Sprint O Block 2 — post-generation script coherence ──────────────────
+  // Final outer gate: when the caller is the ads-launch creative path
+  // (purpose='ads_creative') and supplied an explicit target language,
+  // verify the dominant script of `result.content` matches the language's
+  // writing system. Mismatch (or mixed/empty) triggers up to 2 dedicated
+  // retries with explicit Russian-language correction. After 2nd retry
+  // still fails → throw WriterLanguageMismatchUnrecoverableError, route
+  // returns HTTP 422 — no creative reaches Meta.
+  if (params.purpose === 'ads_creative' && params.language) {
+    const expectedLang = params.language.toLowerCase();
+    const expectedScript = langToScript(expectedLang);
+    const expectedLangNameRu = langFullNameRu(expectedLang);
+    const MAX_SCRIPT_RETRIES = 2;
+    let attempts = 0;
+    let detection = detectDominantScript(result.content || '');
+
+    while (true) {
+      const passed = detection.script === expectedScript && detection.confidence >= 0.7;
+      if (passed) {
+        await emitWriterScriptEvent(params.tenantId, 'writer_script_check_passed', {
+          tenantId: params.tenantId,
+          attempts,
+          expectedLang,
+          expectedScript,
+          detected: { script: detection.script, confidence: detection.confidence, counts: detection.counts },
+          contentSnippet: (result.content || '').slice(0, 160),
+        });
+        logger.info(
+          {
+            tenantId: params.tenantId,
+            attempts,
+            expectedLang,
+            expectedScript,
+            detected: detection.script,
+            confidence: detection.confidence,
+          },
+          '[sprint-o] writer_script_check_passed',
+        );
+        break;
+      }
+
+      if (attempts >= MAX_SCRIPT_RETRIES) {
+        await emitWriterScriptEvent(params.tenantId, 'writer_language_mismatch_unrecoverable', {
+          tenantId: params.tenantId,
+          attempts,
+          expectedLang,
+          expectedScript,
+          detected: { script: detection.script, confidence: detection.confidence, counts: detection.counts },
+          finalContentSnippet: (result.content || '').slice(0, 320),
+        });
+        logger.error(
+          {
+            tenantId: params.tenantId,
+            attempts,
+            expectedLang,
+            expectedScript,
+            detection,
+          },
+          '[sprint-o] writer_language_mismatch_unrecoverable',
+        );
+        throw new WriterLanguageMismatchUnrecoverableError({
+          attempts,
+          expectedLang,
+          expectedScript,
+          detected: detection,
+        });
+      }
+
+      attempts++;
+      await emitWriterScriptEvent(params.tenantId, 'writer_script_mismatch_retry', {
+        tenantId: params.tenantId,
+        attempt: attempts,
+        expectedLang,
+        expectedScript,
+        detected: { script: detection.script, confidence: detection.confidence, counts: detection.counts },
+        contentSnippet: (result.content || '').slice(0, 320),
+      });
+      logger.warn(
+        {
+          tenantId: params.tenantId,
+          attempt: attempts,
+          expectedLang,
+          expectedScript,
+          detection,
+        },
+        '[sprint-o] writer_script_mismatch_retry',
+      );
+
+      const detectedScriptUpper = detection.script.toUpperCase();
+      const correctionMessage = [
+        `YOUR PREVIOUS RESPONSE WAS IN ${detectedScriptUpper} script (letter counts: cyrillic=${detection.counts.cyrillic}, hebrew=${detection.counts.hebrew}, latin=${detection.counts.latin}, arabic=${detection.counts.arabic}, total=${detection.counts.total}).`,
+        `THE TARGET LANGUAGE IS ${expectedLang.toUpperCase()} (${expectedLangNameRu}) WHICH USES ${expectedScript.toUpperCase()} script.`,
+        `REWRITE THE ENTIRE COPY ONLY IN ${expectedLangNameRu} (${expectedLang}). DO NOT USE ANY OTHER LANGUAGE in the "content" and "hashtags" fields.`,
+        'The "image_prompt" field stays in English per the system rules — only the user-facing copy and hashtags must be re-rendered in the target language.',
+        'Preserve the SAME meaning, intent, hook, CTA, and structure as your previous answer — only the surface language changes.',
+        'Return ONLY valid JSON in the same shape: { "content": "...", "hashtags": [...], "image_prompt": "..." }.',
+      ].join('\n');
+
+      const retryMessages: LLMMessage[] = [
+        ...messages,
+        { role: 'assistant', content: JSON.stringify(result) },
+        { role: 'user', content: correctionMessage },
+      ];
+
+      try {
+        const retryData = await httpPost<LLMResponse>(
+          url,
+          {
+            intent: 'quality',
+            input: { messages: retryMessages },
+            maxTokens: 4000,
+            temperature: 0.6,
+          },
+          {
+            Authorization: `Bearer ${signServiceToken()}`,
+            'x-caller-service': 'writer',
+            ...(params.tenantId ? { 'x-tenant-id': params.tenantId } : {}),
+            'x-activity': 'content_generation',
+          },
+          { timeout: 60000 },
+        );
+        const retryOutput = retryData.output || '';
+        const retryExtracted = extractPostFromLLMResponse(retryOutput);
+        if (retryExtracted.ok) {
+          result = retryExtracted.post;
+        } else {
+          logger.warn(
+            { tenantId: params.tenantId, attempt: attempts },
+            '[sprint-o] script-retry LLM response failed to parse; reusing previous result for next iteration',
+          );
+        }
+      } catch (httpErr: any) {
+        logger.warn(
+          { tenantId: params.tenantId, attempt: attempts, error: httpErr?.message },
+          '[sprint-o] script-retry HTTP call failed; will count this attempt and proceed',
+        );
+      }
+
+      detection = detectDominantScript(result.content || '');
     }
   }
 
