@@ -34,6 +34,14 @@ export type BriefInput = z.infer<typeof BriefSchema>;
 
 export const RunSchema = z.object({
   taskId: z.string().uuid(),
+  // Sprint FIX_CONTENT_CADENCE (A1) — when true, the caller (orchestrator under
+  // CONTENT_CADENCE_V2_ENABLED) already owns the content_posts row, so the
+  // writer MUST NOT insert its own anchor row (that was the orphan-leak source:
+  // one orphan per /run, multiplied by the rewrite loop). Default false → legacy
+  // behaviour (writer inserts the anchor), so production is unchanged until V2.
+  skipContentPostInsert: z.boolean().optional(),
+  // Optional: the owned row's id, echoed back in the response for traceability.
+  contentPostId: z.string().uuid().optional(),
 });
 export type RunInput = z.infer<typeof RunSchema>;
 

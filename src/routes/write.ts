@@ -103,7 +103,7 @@ router.post('/brief', authMiddleware, async (req: Request, res: Response) => {
 
 // POST /v1/write/run - Worker вызывает для выполнения
 router.post('/run', authMiddleware, async (req: Request, res: Response) => {
-  const { taskId } = RunSchema.parse(req.body);
+  const { taskId, skipContentPostInsert, contentPostId: ownedContentPostId } = RunSchema.parse(req.body);
   const db = getPrisma();
 
   const task = await db.writeTask.findUnique({ where: { id: taskId } });
@@ -267,7 +267,17 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
 
   // b2/t02: Persist draft into public.content_posts so pipeline has an anchor
   // row that scorer + publisher can update. Non-blocking.
-  let contentPostId: string | null = null;
+  // Sprint FIX_CONTENT_CADENCE (A1): when the caller already owns the row
+  // (skipContentPostInsert — orchestrator under CONTENT_CADENCE_V2_ENABLED),
+  // skip this INSERT entirely. This was the orphan-leak source (one orphan row
+  // per /run, source NULL, never re-addressed). We echo the caller's owned id.
+  let contentPostId: string | null = ownedContentPostId ?? null;
+  if (skipContentPostInsert) {
+    logger.info(
+      { taskId: task.id, ownedContentPostId: contentPostId },
+      '[cadence-v2/A1] skipContentPostInsert — orchestrator owns the content_posts row; writer skips anchor INSERT',
+    );
+  } else
   try {
     const platformFromTask = taskPlatform || ((task as unknown as { platform?: string }).platform) || 'instagram';
     const contentArm = styleArm || topicArm || null;
