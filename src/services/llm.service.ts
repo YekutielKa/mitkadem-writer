@@ -792,6 +792,13 @@ export async function generateContent(params: GenerateParams): Promise<Generated
       url,
       {
         intent: 'quality',
+        // FIX_BURN_2 (2026-06-08): regular caption generation moved Opus→Sonnet.
+        // content_generation was the single biggest spend node ($88/7d, ×5 of
+        // Sonnet). Measured on 5 varied Hannah briefs through the live gates:
+        // sonnet-4-6 passed 5/5 (avg 0.90) vs opus-4-6 4/5 (avg 0.92) — equal/
+        // better pass-rate, zero fabrications. Explicit so it's decoupled from
+        // the hub default. Revert to opus if caption pass-rate regresses.
+        model: 'claude-sonnet-4-6',
         input: { messages: attemptMessages },
         maxTokens: 1500,
         temperature: 0.85,
@@ -868,6 +875,7 @@ export async function generateContent(params: GenerateParams): Promise<Generated
         url,
         {
           intent: 'quality',
+          model: 'claude-sonnet-4-6', // FIX_BURN_2: match primary caption model
           input: { messages: slopRetryMessages },
           maxTokens: 1500,
           temperature: 0.85,
@@ -1084,6 +1092,7 @@ export async function generateContent(params: GenerateParams): Promise<Generated
           url,
           {
             intent: 'quality',
+            model: 'claude-sonnet-4-6', // FIX_BURN_2: language-coherence rewrite — Sonnet
             input: { messages: retryMessages },
             maxTokens: 4000,
             temperature: 0.6,
