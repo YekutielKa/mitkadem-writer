@@ -338,8 +338,11 @@ function buildSystemPrompt(opts: {
   language: Language;
   armName: StyleArmName | null;
   hashtagAllowlist?: HashtagAllowlist;
+  // Sprint FIX_CONTENT_QUALITY — when true, arm fragments use their grounded
+  // variant (no "invent numbers" mandate) + a factual-integrity backstop.
+  groundedArms?: boolean;
 }): string {
-  const { tenantId, brand, language, armName, hashtagAllowlist } = opts;
+  const { tenantId, brand, language, armName, hashtagAllowlist, groundedArms } = opts;
 
   const sections: string[] = [];
 
@@ -387,7 +390,7 @@ function buildSystemPrompt(opts: {
 
   // 4. Style arm constraints
   if (armName) {
-    sections.push(buildArmPromptFragment(armName));
+    sections.push(buildArmPromptFragment(armName, groundedArms === true));
     sections.push('');
   }
 
@@ -612,15 +615,16 @@ function buildMessages(opts: {
   audience?: string;
   imageBrief?: string;
   hashtagAllowlist?: HashtagAllowlist;
+  groundedArms?: boolean;
 }): LLMMessage[] {
-  const { tenantId, brief, enriched, brand, language, armName, tone, audience, imageBrief, hashtagAllowlist } = opts;
+  const { tenantId, brief, enriched, brand, language, armName, tone, audience, imageBrief, hashtagAllowlist, groundedArms } = opts;
 
   const messages: LLMMessage[] = [];
 
   // 1. System prompt
   messages.push({
     role: 'system',
-    content: buildSystemPrompt({ tenantId, brand, language, armName, hashtagAllowlist }),
+    content: buildSystemPrompt({ tenantId, brand, language, armName, hashtagAllowlist, groundedArms }),
   });
 
   // 2. Many-shot reference examples — conversation history.
@@ -676,6 +680,12 @@ interface GenerateParams {
   // post-generation script-coherence retry loop (max 2 retries, then 422).
   // Absent / other values skip the gate (preserves intro/content paths).
   purpose?: string;
+  // Sprint FIX_CONTENT_QUALITY — per-request override for grounded arm
+  // templates. When undefined, falls back to WRITER_GROUNDED_ARMS_ENABLED env
+  // (default OFF → legacy byte-identical prompt). When true, arm fragments use
+  // their grounded variant + factual-integrity backstop. Used for measurement
+  // without flipping the production env flag.
+  groundedArms?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -738,6 +748,13 @@ export async function generateContent(params: GenerateParams): Promise<Generated
     ? getHashtagAllowlistForCity(profile.city ?? null)
     : undefined;
 
+  // Sprint FIX_CONTENT_QUALITY — resolve grounded-arms mode. Per-request
+  // override wins; otherwise the env flag (default OFF → legacy prompt). Read
+  // process.env directly (same precedent as WRITER_FEWSHOT_EXAMPLES) so the
+  // env schema stays untouched and the change is fully reversible.
+  const groundedArms =
+    params.groundedArms ?? process.env.WRITER_GROUNDED_ARMS_ENABLED === 'true';
+
   // 4. Build many-shot conversation
   const messages = buildMessages({
     tenantId: params.tenantId || '',
@@ -750,12 +767,14 @@ export async function generateContent(params: GenerateParams): Promise<Generated
     audience: params.audience,
     imageBrief: params.image_brief,
     hashtagAllowlist,
+    groundedArms,
   });
 
   logger.info(
     {
       tenantId: params.tenantId,
       arm: armName,
+      groundedArms,
       language,
       messageCount: messages.length,
       systemBytes: messages[0].content.length,

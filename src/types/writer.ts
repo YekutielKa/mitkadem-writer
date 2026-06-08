@@ -42,6 +42,11 @@ export const RunSchema = z.object({
   skipContentPostInsert: z.boolean().optional(),
   // Optional: the owned row's id, echoed back in the response for traceability.
   contentPostId: z.string().uuid().optional(),
+  // Sprint FIX_CONTENT_QUALITY — per-request override for grounded arm
+  // templates (no "invent numbers" mandate). Undefined → falls back to the
+  // WRITER_GROUNDED_ARMS_ENABLED env flag (default OFF). Lets us measure the
+  // grounded prompt on the deployed service without flipping the prod flag.
+  groundedArmsOverride: z.boolean().optional(),
 });
 export type RunInput = z.infer<typeof RunSchema>;
 

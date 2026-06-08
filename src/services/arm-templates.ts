@@ -27,7 +27,31 @@ export interface ArmConstraints {
   cta?: 'forbidden' | 'required' | 'optional'
   hookStyle?: string
   description: string
+  // Sprint FIX_CONTENT_QUALITY — grounded variant of `description`, used only
+  // when the writer runs with WRITER_GROUNDED_ARMS_ENABLED (or a per-request
+  // groundedArms override). The legacy `description` mandates "invent concrete
+  // numbers / measurements / a named client / a measurable per-client change",
+  // which makes the LLM fabricate clinical figures (3 см, 60°, 12-15 кг, C1-C4)
+  // that the downstream scorer/fact-check then penalise (criterion #6: no
+  // unconfirmed numbers) and that violate avoid_topics (medical promises, fake
+  // client names). The grounded variant keeps the structure but forbids
+  // fabrication and steers toward process/technique grounded in the brief.
+  // Only set on arms whose legacy text mandates invented specifics; arms
+  // without it fall back to `description` even when grounded.
+  groundedDescription?: string
 }
+
+// Sprint FIX_CONTENT_QUALITY — appended to EVERY arm fragment when grounded
+// mode is on. A hard backstop that overrides any residual "be concrete /
+// invent numbers" pull from the description or the many-shot examples.
+export const GROUNDING_DIRECTIVE = `=== ЗАЗЕМЛЕНИЕ ФАКТОВ (factual integrity — overrides any "invent numbers" guidance above) ===
+- Используй ТОЛЬКО факты, числа, цены, услуги, техники и результаты, которые ЕСТЬ в брифе, бренд-профиле или стратегии выше. Если факта нет — НЕ придумывай его.
+- НИКОГДА не выдумывай клинические/физические замеры конкретного клиента: сантиметры, градусы, килограммы, позвонки (C1-C4), «плечи опустились на 3 см», «поворот 60° вместо 80», «ушло 12-15 кг». Этих данных у тебя нет — выдумывать их запрещено.
+- НИКОГДА не выдумывай конкретного клиента, его имя, профессию или дословную цитату, если бриф не дал реального отзыва.
+- Описывай ПРОЦЕСС, ТЕХНИКУ и ПОДХОД (что делается и как это работает), а не выдуманный измеримый результат конкретного клиента.
+- Уважай avoid_topics: НИКАКИХ медицинских обещаний и гарантий здоровья (вылечим, восстановим позвоночник и т.п.).
+- «Конкретность» = реальная названная услуга, реальная заявленная цена, реальная техника — НЕ выдуманная статистика.
+=== END ЗАЗЕМЛЕНИЕ ===`
 
 export const STYLE_ARMS: Record<StyleArmName, ArmConstraints> = {
   short_punchy: {
@@ -79,6 +103,28 @@ FORBIDDEN:
 
 The writer has many-shot examples of this style for the target niche.
 Generalize the structure, not the subject matter.`,
+    groundedDescription: `Long-form educational post that TEACHES something specific and TRUE the audience didn't know. 500-700 chars. 2-3 emoji. CTA at end. 5-10 hashtags.
+
+STRUCTURE:
+1. Myth or common misconception (1-2 sentences)
+2. The grounded truth — explain the TECHNIQUE, MECHANISM or PROCESS that debunks the myth, using only facts present in the brief / brand profile / strategy
+3. Vivid metaphor that makes the mechanism accessible to a layperson
+4. Empowering takeaway for the reader (not a sales pitch)
+
+REQUIRED:
+- Specificity through real, named techniques, materials or tools that appear in the brief/brand — NOT invented statistics
+- One grounding metaphor that a 10-year-old could understand
+- Numbers ONLY if the brief/brand/strategy supplies them (e.g. a declared price or session length). If no number is given, teach through mechanism and process — do not invent one.
+
+FORBIDDEN:
+- Generic descriptors ("professional", "maximally careful", "premium quality")
+- Abstract benefits without mechanism ("lasts longer", "looks better")
+- Sales-pitch endings ("book now for best results")
+- INVENTED numbers, measurements, or clinical results not present in the brief (no «3 см», «60°», «12-15 кг», «C1-C4»)
+- Medical promises (вылечим, восстановим позвоночник)
+
+The writer has many-shot examples of this style for the target niche.
+Generalize the structure, not the subject matter.`,
   },
   question_hook: {
     minChars: 250,
@@ -103,6 +149,26 @@ FORBIDDEN:
 - Rhetorical openers ("Do you know why", "Ever wondered", "Have you noticed")
 - Questions with obvious answers
 - Vague CTAs ("learn more", "contact us")
+
+The writer has many-shot examples of this style for the target niche.`,
+    groundedDescription: `Medium length. First sentence = question that makes reader STOP and think. Not a rhetorical "Do you know why" — a real uncomfortable question.
+
+STRUCTURE:
+1. Question that challenges the reader personally (1 sentence)
+2. Surprising, TRUE answer grounded in the brief facts — explain the mechanism or process (2-3 sentences)
+3. Proof or example consistent with the brief (not an invented statistic)
+4. Specific, actionable CTA
+
+REQUIRED:
+- Question that forces the reader to count, remember, or feel discomfort
+- An answer grounded in real facts from the brief; use a number ONLY if the brief provides it
+- Ending CTA with a specific verb and object
+
+FORBIDDEN:
+- Rhetorical openers ("Do you know why", "Ever wondered", "Have you noticed")
+- Questions with obvious answers
+- Vague CTAs ("learn more", "contact us")
+- INVENTED numbers (money spent, hours wasted, frequency, percentage) not supported by the brief
 
 The writer has many-shot examples of this style for the target niche.`,
   },
@@ -132,6 +198,29 @@ FORBIDDEN:
 - Endings that read like a sales pitch
 
 The writer has many-shot examples of this style for the target niche.`,
+    groundedDescription: `Client story — ONLY when the brief supplies a REAL client testimonial or quote. Voice is human, warm, specific. A fabricated client name/quote is forbidden (it violates avoid_topics: «фейковые отзывы и выдуманные имена клиентов»).
+
+IF the brief contains a real client quote/story:
+1. Direct quote from that client (in "quotes" or «guillemets») — first sentence
+2. Who this person is — only details present in the brief (never "one of our clients")
+3. What specifically was done (named technique/process from the brief)
+4. Human moment at the end (humor, emotion, ongoing relationship)
+
+IF the brief contains NO real client data:
+- DO NOT invent a named client, profession, quote, or measurable result.
+- Instead write a relatable second-person scene ("Представьте, что...") or the master's own perspective on the process, fully in brand voice.
+
+REQUIRED:
+- Every concrete detail (name, profession, result) must come from the brief — never invented
+- Human, not-corporate closing (a joke, an ongoing dynamic, a small moment)
+
+FORBIDDEN:
+- Inventing a client name, profession, quote, or clinical/measurable result
+- Generic testimonial phrasing ("amazing results", "highly recommend")
+- Endings that read like a sales pitch
+- Medical promises or guaranteed health outcomes
+
+The writer has many-shot examples of this style for the target niche.`,
   },
   before_after: {
     minChars: 250,
@@ -157,6 +246,26 @@ FORBIDDEN:
 - "Before / After" formula without narrative
 - Adjective-only descriptions of change ("better", "amazing", "transformed")
 - Anonymous or composite clients
+
+The writer has many-shot examples of this style for the target niche.`,
+    groundedDescription: `Transformation as a PROCESS and JOURNEY — focused on what the work involves over time, NOT on invented clinical measurements.
+
+STRUCTURE:
+1. A relatable starting situation (a feeling or problem the audience recognises) — use a named client ONLY if the brief supplies one; otherwise keep it second-person / representative
+2. The process and what changes through it (the technique, the rhythm of sessions) — grounded in the brief
+3. The qualitative shift (how it feels, what becomes easier) — described honestly, without inventing measurements
+4. Empowering close that invites the reader to see themselves in the story
+
+REQUIRED:
+- Grounding in the real service/technique from the brief
+- An emotional arc from struggle to confidence
+- Time markers ONLY if part of the described service (e.g. a course of sessions)
+
+FORBIDDEN:
+- INVENTED clinical/physical measurements of a specific person (cm, degrees, kg, vertebrae such as C1-C4, "плечи опустились на 3 см", "поворот 60° вместо 80")
+- MEDICAL promises or guaranteed health outcomes
+- A fabricated "named" client (violates avoid_topics)
+- Adjective-only descriptions of change ("better", "amazing", "transformed") with no real mechanism
 
 The writer has many-shot examples of this style for the target niche.`,
   },
@@ -201,11 +310,14 @@ export function isStyleArmName(value: string | null | undefined): value is Style
  * Build a strict constraint block to inject into the system prompt.
  * The wording is intentionally directive — LLMs respect "MUST"/"FORBIDDEN".
  */
-export function buildArmPromptFragment(arm: StyleArmName): string {
+export function buildArmPromptFragment(arm: StyleArmName, grounded = false): string {
   const c = STYLE_ARMS[arm]
   const lines: string[] = []
   lines.push(`=== STYLE ARM: ${arm} (STRICT — VIOLATIONS WILL BE REJECTED) ===`)
-  lines.push(c.description)
+  // Sprint FIX_CONTENT_QUALITY — when grounded mode is on, prefer the arm's
+  // grounded description (no "invent numbers" mandate). Arms without a grounded
+  // variant fall back to the legacy description unchanged.
+  lines.push(grounded && c.groundedDescription ? c.groundedDescription : c.description)
   lines.push('')
   lines.push('HARD CONSTRAINTS:')
   if (c.minChars !== undefined) lines.push(`- Caption MUST be at least ${c.minChars} characters`)
@@ -220,6 +332,11 @@ export function buildArmPromptFragment(arm: StyleArmName): string {
   if (c.hookStyle) lines.push(`- Opening style: ${c.hookStyle}`)
   // premium-01/task4-fix-a: hook diversity — forbid verbatim brief opening
   lines.push('- The first sentence MUST NOT be a literal copy of the brief topic. Re-frame it: a hook, an angle, an emotion — never the same wording the brief uses.')
+  // Sprint FIX_CONTENT_QUALITY — hard factual-integrity backstop, grounded mode only.
+  if (grounded) {
+    lines.push('')
+    lines.push(GROUNDING_DIRECTIVE)
+  }
   lines.push('=== END STYLE ARM ===')
   return lines.join('\n')
 }

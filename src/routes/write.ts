@@ -103,7 +103,7 @@ router.post('/brief', authMiddleware, async (req: Request, res: Response) => {
 
 // POST /v1/write/run - Worker вызывает для выполнения
 router.post('/run', authMiddleware, async (req: Request, res: Response) => {
-  const { taskId, skipContentPostInsert, contentPostId: ownedContentPostId } = RunSchema.parse(req.body);
+  const { taskId, skipContentPostInsert, contentPostId: ownedContentPostId, groundedArmsOverride } = RunSchema.parse(req.body);
   const db = getPrisma();
 
   const task = await db.writeTask.findUnique({ where: { id: taskId } });
@@ -212,6 +212,9 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
       language: taskLanguage || undefined, // pw3/fix3
       // Sprint O Block 2 — drives post-generation script-coherence retry.
       purpose: taskPurpose || undefined,
+      // Sprint FIX_CONTENT_QUALITY — per-request grounded-arms override (else
+      // env flag, default OFF). Used for measurement without flipping prod.
+      groundedArms: groundedArmsOverride,
     });
   } catch (err: any) {
     // Sprint O Block 2 — refuse-don't-guess at the writer boundary.
