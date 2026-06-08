@@ -623,9 +623,14 @@ function buildMessages(opts: {
     content: buildSystemPrompt({ tenantId, brand, language, armName, hashtagAllowlist }),
   });
 
-  // 2. Many-shot reference examples — conversation history
+  // 2. Many-shot reference examples — conversation history.
+  // SPRINT_COST_FIX: example count is the biggest input-token inflator (3 full
+  // caption envelopes per call). Make it tunable (default 1) so the few-shot
+  // budget is reversible; measured to hold caption pass-rate at 1 example.
+  // Set WRITER_FEWSHOT_EXAMPLES=3 to restore the prior behaviour.
   const exampleArm: any = armName || 'any';
-  const examples = getRandomExamples(language, exampleArm, 3);
+  const fewShotN = Math.max(0, Number(process.env.WRITER_FEWSHOT_EXAMPLES ?? 1));
+  const examples = getRandomExamples(language, exampleArm, fewShotN);
 
   for (const example of examples) {
     messages.push({
@@ -880,7 +885,15 @@ export async function generateContent(params: GenerateParams): Promise<Generated
           maxTokens: 1500,
           temperature: 0.85,
         },
-        { Authorization: `Bearer ${signServiceToken()}` },
+        {
+          // SPRINT_COST_FIX: slop-retry was the one writer call missing caller
+          // attribution → it fell into (unattributed) in the ledger. Tag it like
+          // the primary + lang-retry calls so writer spend is fully accounted.
+          Authorization: `Bearer ${signServiceToken()}`,
+          'x-caller-service': 'writer',
+          ...(params.tenantId ? { 'x-tenant-id': params.tenantId } : {}),
+          'x-activity': 'content_generation',
+        },
         { timeout: 60000 },
       );
       const retryOutput = retryData.output || '';
