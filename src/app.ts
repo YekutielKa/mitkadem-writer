@@ -88,7 +88,16 @@ migrateHookHistoryTable().catch((e) => {
  *     restarts and missed events without any reconciliation logic
  *   - First boot also picks up all historical published posts automatically
  */
-cron.schedule('*/5 * * * *', () => {
+// IMPL_3V4 (ШАГ 3в-4) tick-tidy. The backfill is idempotent and cheap (regex,
+// 0 LLM, ON CONFLICT DO NOTHING); a 5-min scan is mostly idle. Under
+// TICK_TIDY_V2 it runs every HOOK_BACKFILL_CRON (default '*/30 * * * *' = 30
+// min). The boot warm-up still runs so historical posts are backfilled at
+// startup. Default (flag unset) = '*/5 * * * *' → byte-for-byte.
+const TICK_TIDY_V2 = process.env.TICK_TIDY_V2 === 'true' || process.env.TICK_TIDY_V2 === '1';
+const hookBackfillCron = TICK_TIDY_V2
+  ? (process.env.HOOK_BACKFILL_CRON || '*/30 * * * *')
+  : '*/5 * * * *';
+cron.schedule(hookBackfillCron, () => {
   backfillHookHistoryTick().catch((e) => {
     // Already logged inside the tick — this is the last-resort guard
     void e;
