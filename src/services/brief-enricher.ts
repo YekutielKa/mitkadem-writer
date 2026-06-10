@@ -79,6 +79,9 @@ async function loadBrandLayer(tenantId: string): Promise<BrandLayer | null> {
       bannedWords: [],          // Premium 02: extract from brand profile
       signatureFacts: [],       // Premium 02: extract recurring facts
       approvedExamples: profile.approvedPosts || [],
+      // R4 USE-DATA A2 — carry the MARKET advisory through untouched. Undefined
+      // when tenant-brain omitted it (flag OFF / no data) → render skips it.
+      marketContext: profile.marketContext,
     };
   } catch (e: any) {
     logger.warn({ tenantId, error: e?.message }, '[enricher] brand layer failed');

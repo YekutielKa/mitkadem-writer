@@ -25,6 +25,11 @@ export interface BrandLayer {
   bannedWords?: string[];
   signatureFacts?: string[];
   approvedExamples?: Array<{ content: string; channel?: string }>;
+  // R4 USE-DATA A2 — researcher MARKET advisory (competitor price range / market
+  // audience). Rendered as a clearly-labelled, separate advisory block for
+  // tone/positioning only; never published as a figure, never the master's own
+  // price/audience. Carried from BrandProfile.marketContext (tenant-brain).
+  marketContext?: { avgPrices?: string | null; targetAudience?: string | null };
 }
 
 export interface RecentHookSummary {

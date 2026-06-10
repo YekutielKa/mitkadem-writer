@@ -18,6 +18,15 @@ const envSchema = z.object({
   EVENTS_URL: z.string().url().default('https://mitkadem-events-production.up.railway.app'),
   // BLOCK_30 Sprint 4 — adapters-meta synthetic-default publish endpoint base URL.
   ADAPTERS_META_URL: z.string().url().default('https://mitkadem-adapters-meta-production.up.railway.app'),
+  // R4 USE-DATA A2 (writer follow-up) — gate the researcher MARKET advisory block
+  // in the content brief. Same flag the marketing-brain / tenant-brain wiring
+  // reads. Default OFF → prompt byte-for-byte (the advisory block is skipped even
+  // if tenant-brain happened to send marketContext).
+  RESEARCH_USE_DATA_V2: z
+    .string()
+    .optional()
+    .default('false')
+    .transform((v) => v === 'true' || v === '1'),
   // BLOCK_30 Sprint 7 — Loop 1 writer-side consumer wire (Path B preferred per
   // Phase 0 #15: writer DB role queries public.learning_events directly,
   // preserves corpus #82 — no MARKETING_BRAIN_URL added). Default OFF.

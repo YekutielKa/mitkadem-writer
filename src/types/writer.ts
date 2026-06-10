@@ -104,6 +104,12 @@ export interface BrandProfile {
   uniqueValue?: string;
   preferredTone: string;
   approvedPosts: Array<{ content: string; channel: string }>;
+  // R4 USE-DATA A2 — researcher MARKET advisory (competitor price range / market
+  // audience view), surfaced by tenant-brain under RESEARCH_USE_DATA_V2. Present
+  // only when the flag is on AND data exists. RYNOCHNOE ≠ SOBSTVENNOE: this is the
+  // market view for tone/positioning, NEVER the master's own price/audience and
+  // NEVER published as a concrete figure.
+  marketContext?: { avgPrices?: string | null; targetAudience?: string | null };
 }
 
 // === Hints from insights ===

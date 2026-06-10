@@ -13,6 +13,7 @@ import {
 } from './arm-templates';
 import { enrichBrief } from './brief-enricher';
 import type { EnrichedBrief } from '../types/enriched-brief';
+import { renderMarketAdvisory } from './r4-market-advisory';
 import { getPrisma } from '../lib/prisma';
 import {
   getRandomExamples,
@@ -496,6 +497,15 @@ function buildFinalUserMessage(opts: {
     if (b.uniqueValue) sections.push(`Уникальная ценность: ${b.uniqueValue}`);
     if (b.preferredTone) sections.push(`Тон: ${b.preferredTone}`);
     sections.push('');
+  }
+
+  // R4 USE-DATA A2 — researcher MARKET advisory (competitor price range / market
+  // audience), rendered as a SEPARATE, clearly-labelled block with a hard
+  // anti-leak guard. Flag-gated (default OFF → [] → prompt byte-for-byte) and
+  // presence-gated. Market view for tone/positioning ONLY — never published as a
+  // figure, never the master's own price.
+  for (const line of renderMarketAdvisory(enriched.brand?.marketContext, getEnv().RESEARCH_USE_DATA_V2)) {
+    sections.push(line);
   }
 
   // Anti-repetition — CRITICAL, must be in user message for attention
