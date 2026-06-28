@@ -119,14 +119,14 @@ setTimeout(() => {
 export async function migrateWriteTaskArmColumns(): Promise<void> {
   const db = getPrisma();
   try {
-    await db.$executeRawUnsafe(`ALTER TABLE "WriteTask" ADD COLUMN IF NOT EXISTS "styleArm"   TEXT`);
-    await db.$executeRawUnsafe(`ALTER TABLE "WriteTask" ADD COLUMN IF NOT EXISTS "topicArm"   TEXT`);
-    await db.$executeRawUnsafe(`ALTER TABLE "WriteTask" ADD COLUMN IF NOT EXISTS "constraints" JSONB`);
+    await db.$executeRawUnsafe(`ALTER TABLE mitkadem_writer."WriteTask" ADD COLUMN IF NOT EXISTS "styleArm"   TEXT`);
+    await db.$executeRawUnsafe(`ALTER TABLE mitkadem_writer."WriteTask" ADD COLUMN IF NOT EXISTS "topicArm"   TEXT`);
+    await db.$executeRawUnsafe(`ALTER TABLE mitkadem_writer."WriteTask" ADD COLUMN IF NOT EXISTS "constraints" JSONB`);
     logger.info('[startup-migration] WriteTask arm columns ready');
 
     // pw3/fix3: add language column
     await db.$executeRawUnsafe(`
-      ALTER TABLE "WriteTask" ADD COLUMN IF NOT EXISTS "language" TEXT
+      ALTER TABLE mitkadem_writer."WriteTask" ADD COLUMN IF NOT EXISTS "language" TEXT
     `);
     logger.info('[startup-migration] WriteTask language column ready');
   } catch (e: any) {

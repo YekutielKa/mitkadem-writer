@@ -70,7 +70,7 @@ router.post('/brief', authMiddleware, async (req: Request, res: Response) => {
   ) {
     try {
       await db.$executeRawUnsafe(
-        `UPDATE "WriteTask"
+        `UPDATE mitkadem_writer."WriteTask"
             SET "styleArm" = $1,
                 "topicArm" = $2,
                 "constraints" = $3::jsonb,
@@ -121,7 +121,7 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
   let taskPurpose: string | null = null;
   try {
     const rows = await db.$queryRawUnsafe<Array<{ styleArm: string | null; topicArm: string | null; language: string | null; platform: string | null; purpose: string | null }>>(
-      `SELECT "styleArm", "topicArm", "language", "platform", "purpose" FROM "WriteTask" WHERE id = $1`,
+      `SELECT "styleArm", "topicArm", "language", "platform", "purpose" FROM mitkadem_writer."WriteTask" WHERE id = $1`,
       taskId,
     );
     if (rows[0]) {
@@ -307,7 +307,7 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
       // implicit cast in prepared statements fails silently. Surface failure
       // via logger.warn so future regressions don't stay invisible.
       await db.$executeRawUnsafe(
-        `UPDATE "WriteTask" SET "contentPostId" = $1::uuid WHERE id = $2`,
+        `UPDATE mitkadem_writer."WriteTask" SET "contentPostId" = $1::uuid WHERE id = $2`,
         contentPostId,
         task.id,
       ).catch((e: any) => {
