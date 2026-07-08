@@ -343,7 +343,7 @@ function buildSystemPrompt(opts: {
   // variant (no "invent numbers" mandate) + a factual-integrity backstop.
   groundedArms?: boolean;
 }): string {
-  const { tenantId, brand, language, armName, hashtagAllowlist, groundedArms } = opts;
+  const { brand, language, armName, hashtagAllowlist, groundedArms } = opts;
 
   const sections: string[] = [];
 
@@ -382,7 +382,7 @@ function buildSystemPrompt(opts: {
   sections.push('');
 
   // 2. High-bar audience framing
-  sections.push(buildHighBarFraming(tenantId, brand));
+  sections.push(buildHighBarFraming(brand));
   sections.push('');
 
   // 3. Anti-slop block (language-specific)
