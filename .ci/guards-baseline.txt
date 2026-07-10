@@ -1,0 +1,4 @@
+# Pre-existing pattern-guard violations (warning, not fail). Format: <GUARD_ID>|<file>.
+# Снял нарушение — удали строку тем же PR (baseline должен худеть).
+# S1|CLAUDE.md — слово AUTH_BYPASS в тексте запрета (false positive стража).
+S1|CLAUDE.md

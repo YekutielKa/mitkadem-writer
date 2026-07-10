@@ -1,0 +1,14 @@
+# Машинные стражи паттернов Mitkadem (ARCHITECT_KIT, часть D).
+# Существующие нарушения — warning (baseline), новые — fail. Ссылки в кит печатает скрипт.
+name: pattern-guards
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: pattern-guards (service)
+        run: bash .ci/pattern-guards.sh
