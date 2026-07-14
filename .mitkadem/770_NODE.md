@@ -16,17 +16,17 @@
 
 ## Runtime entry points and complete route inventory
 
-- `VERIFIED` `GET /:id` — `src/routes/write.ts`
+- `VERIFIED` `GET /v1/write/:id` — `src/routes/write.ts`
 - `VERIFIED` `GET /diag` — `src/routes/health.ts`
 - `VERIFIED` `GET /healthz` — `src/routes/health.ts`
-- `VERIFIED` `GET /hints` — `src/routes/writer.ts`
+- `VERIFIED` `GET /v1/writer/hints` — `src/routes/writer.ts`
 - `VERIFIED` `GET /readyz` — `src/routes/health.ts`
-- `VERIFIED` `POST /approve/:taskId` — `src/routes/writer.ts`
-- `VERIFIED` `POST /brief` — `src/routes/write.ts`
-- `VERIFIED` `POST /feedback` — `src/routes/writer.ts`
-- `VERIFIED` `POST /mint` — `src/routes/dev.ts`
-- `VERIFIED` `POST /reject/:taskId` — `src/routes/writer.ts`
-- `VERIFIED` `POST /run` — `src/routes/write.ts`
+- `VERIFIED` `POST /v1/writer/approve/:taskId` — `src/routes/writer.ts`
+- `VERIFIED` `POST /v1/write/brief` — `src/routes/write.ts`
+- `VERIFIED` `POST /v1/writer/feedback` — `src/routes/writer.ts`
+- `VERIFIED` `POST /v1/_dev/mint` — `src/routes/dev.ts`
+- `VERIFIED` `POST /v1/writer/reject/:taskId` — `src/routes/writer.ts`
+- `VERIFIED` `POST /v1/write/run` — `src/routes/write.ts`
 
 Mounted prefixes are already included where literal in the route; router mounts and middleware order remain governed by the cited active source. Health/dev routes may intentionally precede authentication; all other authorization claims require the exact middleware binding.
 
