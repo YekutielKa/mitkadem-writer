@@ -171,3 +171,16 @@ flowchart LR
 - Verification date: `2026-07-14` (`Asia/Jerusalem`)
 - Documentation confidence: `MEDIUM`
 - Deployment state: `UNKNOWN`; production approval: false.
+## Phase 2.4 canonical metrics
+
+```yaml
+registered_evidence_item_count: 44
+contradiction_count: 0
+unknown_group_count: 5
+effective_route_count: 11
+worker_timer_count: 3
+environment_name_count: 32
+provider_count: 0
+model_identifier_count: 1
+provider_model_declaration_count: 1
+```
