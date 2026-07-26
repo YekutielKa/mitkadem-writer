@@ -677,6 +677,8 @@ function buildMessages(opts: {
 // ─────────────────────────────────────────────────────────────────────────────
 interface GenerateParams {
   tenantId?: string;
+  workflowId: string;
+  correlationId: string;
   brief: string;
   tone?: string;
   audience?: string;
@@ -842,6 +844,11 @@ export async function generateContent(params: GenerateParams): Promise<Generated
         'x-caller-service': 'writer',
         ...(params.tenantId ? { 'x-tenant-id': params.tenantId } : {}),
         'x-activity': 'content_generation',
+        'x-workflow-id': params.workflowId,
+        'x-correlation-id': params.correlationId,
+        'x-request-id': params.correlationId,
+        'x-budget-scope': 'workflow',
+        'x-model-policy': 'writer-content-v1',
       },
       { timeout: 60000 },
     );
@@ -922,6 +929,11 @@ export async function generateContent(params: GenerateParams): Promise<Generated
           'x-caller-service': 'writer',
           ...(params.tenantId ? { 'x-tenant-id': params.tenantId } : {}),
           'x-activity': 'content_generation',
+          'x-workflow-id': params.workflowId,
+          'x-correlation-id': params.correlationId,
+          'x-request-id': params.correlationId,
+          'x-budget-scope': 'workflow',
+          'x-model-policy': 'writer-content-v1',
         },
         { timeout: 60000 },
       );
@@ -1144,6 +1156,11 @@ export async function generateContent(params: GenerateParams): Promise<Generated
             'x-caller-service': 'writer',
             ...(params.tenantId ? { 'x-tenant-id': params.tenantId } : {}),
             'x-activity': 'content_generation',
+            'x-workflow-id': params.workflowId,
+            'x-correlation-id': params.correlationId,
+            'x-request-id': params.correlationId,
+            'x-budget-scope': 'workflow',
+            'x-model-policy': 'writer-content-v1',
           },
           { timeout: 60000 },
         );
