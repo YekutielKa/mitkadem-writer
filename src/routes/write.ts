@@ -13,13 +13,19 @@ import {
   lookupBriefQualityForCluster,
 } from '../services/brief-quality-lookup';
 import { getEnv } from '../config/env';
+import {
+  newCommandId,
+  requiredHeader,
+  WriteJobSchema,
+} from '../lib/tenant-job-context';
+import type { AuthenticatedRequest } from '../middleware/auth';
 
 const MITKADEM_SELF_TENANT_UUID = 'e9efe9c9-fca4-4c38-9d68-c551e8bad4ae';
 
 const router = Router();
 
 // POST /v1/write/brief - Создать задачу на генерацию
-router.post('/brief', authMiddleware, async (req: Request, res: Response) => {
+router.post('/brief', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   let input: z.infer<typeof BriefSchema>;
   try {
     input = BriefSchema.parse(req.body);
@@ -91,8 +97,39 @@ router.post('/brief', authMiddleware, async (req: Request, res: Response) => {
     }
   }
 
-  // Try to add to queue
-  const jobId = await addToQueue(task.id, task.tenantId);
+  let jobContext;
+  try {
+    const commandId = newCommandId();
+    jobContext = WriteJobSchema.parse({
+      taskId: task.id,
+      tenantId: task.tenantId,
+      workflowId: requiredHeader(req.headers as Record<string, unknown>, 'x-workflow-id'),
+      commandId,
+      idempotencyKey: requiredHeader(req.headers as Record<string, unknown>, 'idempotency-key'),
+      correlationId: requiredHeader(req.headers as Record<string, unknown>, 'x-correlation-id'),
+      traceId: requiredHeader(req.headers as Record<string, unknown>, 'x-trace-id'),
+      authorityContext: {
+        actorType: req.auth?.iss === 'mitkadem' ? 'service' : 'user',
+        actorId: req.auth?.sub,
+        permissions: req.auth?.permissions,
+      },
+    });
+  } catch (error) {
+    await db.writeTask.delete({ where: { id: task.id } });
+    res.status(400).json({
+      error: 'missing_tenant_context',
+      message: (error as Error).message,
+    });
+    return;
+  }
+
+  if (req.auth?.tenantId !== task.tenantId) {
+    await db.writeTask.delete({ where: { id: task.id } });
+    res.status(403).json({ error: 'tenant_context_mismatch' });
+    return;
+  }
+
+  const jobId = await addToQueue(jobContext);
 
   if (jobId) {
     res.status(202).json({ ...task, async: true, jobId });
@@ -102,11 +139,26 @@ router.post('/brief', authMiddleware, async (req: Request, res: Response) => {
 });
 
 // POST /v1/write/run - Worker вызывает для выполнения
-router.post('/run', authMiddleware, async (req: Request, res: Response) => {
-  const { taskId, skipContentPostInsert, contentPostId: ownedContentPostId, groundedArmsOverride } = RunSchema.parse(req.body);
+router.post('/run', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const runContext = RunSchema.parse(req.body);
+  const {
+    taskId,
+    tenantId,
+    skipContentPostInsert,
+    contentPostId: ownedContentPostId,
+    groundedArmsOverride,
+  } = runContext;
+  if (
+    req.auth?.tenantId !== tenantId ||
+    req.auth?.workflowId !== runContext.workflowId ||
+    req.auth?.commandId !== runContext.commandId
+  ) {
+    res.status(403).json({ error: 'tenant_context_mismatch' });
+    return;
+  }
   const db = getPrisma();
 
-  const task = await db.writeTask.findUnique({ where: { id: taskId } });
+  const task = await db.writeTask.findFirst({ where: { id: taskId, tenantId } });
   if (!task) {
     res.status(404).json({ error: 'not found' });
     return;

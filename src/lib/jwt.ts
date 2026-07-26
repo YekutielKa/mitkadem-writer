@@ -9,18 +9,30 @@ export interface ServiceTokenPayload {
   sub: string;
   aud: string;
   iss: string;
+  tenantId?: string;
+  workflowId?: string;
+  commandId?: string;
+  permissions?: string[];
 }
 
 /**
  * Создаёт JWT для service-to-service вызовов
  * ВАЖНО: issuer='mitkadem', НЕ название сервиса!
  */
-export function signServiceToken(subject: string = 'writer'): string {
+export function signServiceToken(
+  subject: string = 'writer',
+  context?: {
+    tenantId: string;
+    workflowId: string;
+    commandId: string;
+    permissions: string[];
+  },
+): string {
   const env = getEnv();
   return jwt.sign(
-    { sub: subject, aud: JWT_AUDIENCE, iss: JWT_ISSUER },
+    { sub: subject, aud: JWT_AUDIENCE, iss: JWT_ISSUER, ...context },
     env.SERVICE_JWT_SECRET,
-    { expiresIn: 300 } // 5 минут, ЧИСЛО не строка!
+    { expiresIn: 300, algorithm: 'HS256', jwtid: context?.commandId }
   );
 }
 
@@ -29,7 +41,10 @@ export function signServiceToken(subject: string = 'writer'): string {
  */
 export function verifyToken(token: string): ServiceTokenPayload {
   const env = getEnv();
-  return jwt.verify(token, env.SERVICE_JWT_SECRET) as ServiceTokenPayload;
+  return jwt.verify(token, env.SERVICE_JWT_SECRET, {
+    algorithms: ['HS256'],
+    audience: JWT_AUDIENCE,
+  }) as ServiceTokenPayload;
 }
 
 /**

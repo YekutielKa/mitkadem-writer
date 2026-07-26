@@ -4,26 +4,44 @@ import { getEnv } from '../config/env';
 import { logger } from '../lib/logger';
 import { signServiceToken } from '../lib/jwt';
 import { httpPost } from '../lib/http';
+import { WriteJobData, WriteJobSchema } from '../lib/tenant-job-context';
 
 let worker: Worker | null = null;
 let connection: Redis | null = null;
 
-interface WriteJobData {
-  taskId: string;
-  tenantId: string;
-}
-
 async function processJob(job: Job<WriteJobData>): Promise<void> {
-  const { taskId, tenantId } = job.data;
-  logger.info({ taskId, tenantId, jobId: job.id }, 'Processing write job');
+  const context = WriteJobSchema.parse(job.data);
+  const { taskId, tenantId } = context;
+  logger.info({
+    taskId,
+    tenantId,
+    workflowId: context.workflowId,
+    commandId: context.commandId,
+    correlationId: context.correlationId,
+    traceId: context.traceId,
+    jobId: job.id,
+  }, 'Processing write job');
 
   const env = getEnv();
   const url = `http://localhost:${env.PORT}/v1/write/run`;
 
   const result = await httpPost<{ id: string; status: string }>(
     url,
-    { taskId },
-    { Authorization: `Bearer ${signServiceToken()}` },
+    context,
+    {
+      Authorization: `Bearer ${signServiceToken('writer-worker', {
+        tenantId,
+        workflowId: context.workflowId,
+        commandId: context.commandId,
+        permissions: context.authorityContext.permissions,
+      })}`,
+      'Idempotency-Key': context.idempotencyKey,
+      'X-Tenant-Id': tenantId,
+      'X-Workflow-Id': context.workflowId,
+      'X-Command-Id': context.commandId,
+      'X-Correlation-Id': context.correlationId,
+      'X-Trace-Id': context.traceId,
+    },
     { timeout: 90000 } // LLM generation can be slow
   );
 

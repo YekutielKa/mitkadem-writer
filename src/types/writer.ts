@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TenantJobContextSchema } from '../lib/tenant-job-context';
 
 // === Request Schemas ===
 
@@ -32,7 +33,7 @@ export const BriefSchema = z
   });
 export type BriefInput = z.infer<typeof BriefSchema>;
 
-export const RunSchema = z.object({
+export const RunSchema = TenantJobContextSchema.extend({
   taskId: z.string().uuid(),
   // Sprint FIX_CONTENT_CADENCE (A1) — when true, the caller (orchestrator under
   // CONTENT_CADENCE_V2_ENABLED) already owns the content_posts row, so the

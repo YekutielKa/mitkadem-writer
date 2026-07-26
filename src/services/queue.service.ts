@@ -2,6 +2,7 @@ import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { getEnv } from '../config/env';
 import { logger } from '../lib/logger';
+import { WriteJobData, WriteJobSchema } from '../lib/tenant-job-context';
 
 let queue: Queue | null = null;
 let connection: Redis | null = null;
@@ -22,7 +23,8 @@ function getQueue(): Queue | null {
   return queue;
 }
 
-export async function addToQueue(taskId: string, tenantId: string): Promise<string | null> {
+export async function addToQueue(input: WriteJobData): Promise<string | null> {
+  const jobData = WriteJobSchema.parse(input);
   const q = getQueue();
 
   if (!q) {
@@ -32,8 +34,9 @@ export async function addToQueue(taskId: string, tenantId: string): Promise<stri
 
   const job = await q.add(
     'process',
-    { taskId, tenantId },
+    jobData,
     {
+      jobId: `${jobData.tenantId}:${jobData.commandId}`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
       removeOnComplete: 100,
@@ -41,7 +44,14 @@ export async function addToQueue(taskId: string, tenantId: string): Promise<stri
     }
   );
 
-  logger.info({ jobId: job.id, taskId }, 'Job added to queue');
+  logger.info({
+    jobId: job.id,
+    taskId: jobData.taskId,
+    tenantId: jobData.tenantId,
+    workflowId: jobData.workflowId,
+    commandId: jobData.commandId,
+    correlationId: jobData.correlationId,
+  }, 'Job added to queue');
   return job.id || null;
 }
 

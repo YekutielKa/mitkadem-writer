@@ -8,6 +8,7 @@
     "build": "tsc && mkdir -p dist/knowledge && cp src/knowledge/*.md dist/knowledge/",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
+    "test:tenant-isolation": "npm run build && node --test test/tenant-job-context.test.js",
     "prisma:generate": "prisma generate"
   },
   "dependencies": {
