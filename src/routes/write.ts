@@ -203,6 +203,8 @@ router.post('/run', authMiddleware, async (req: Request, res: Response) => {
       : task.brief;
     result = await generateContent({
       tenantId: task.tenantId,
+      workflowId: task.id,
+      correlationId: task.id,
       brief: augmentedBrief,
       tone: (hints.tone as string) || task.tone || undefined,
       audience: task.audience || undefined,
