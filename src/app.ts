@@ -9,7 +9,7 @@ import { requestIdMiddleware } from './middleware/requestId';
 import { errorHandler } from './middleware/errorHandler';
 
 import healthRoutes from './routes/health';
-import { getPrisma } from './lib/prisma';
+import { disconnectMigrationPrisma, getMigrationPrisma } from './lib/prisma';
 import cron from 'node-cron';
 import { backfillHookHistoryTick } from './services/hook-history.service';
 import devRoutes from './routes/dev';
@@ -41,7 +41,7 @@ app.use(errorHandler);
  * Stores extracted first-line hooks from published posts for anti-repetition.
  */
 export async function migrateHookHistoryTable(): Promise<void> {
-  const db = getPrisma();
+  const db = getMigrationPrisma();
   try {
     await db.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS public.tenant_hook_history (
@@ -70,10 +70,6 @@ export async function migrateHookHistoryTable(): Promise<void> {
   }
 }
 
-migrateHookHistoryTable().catch((e) => {
-  logger.fatal({ err: e?.message }, '[startup] hook history migration failed — exiting');
-  process.exit(1);
-});
 // === /premium-01/module-d ===
 
 // === premium-01/module-d-cron: hook history backfill cron ===
@@ -117,7 +113,7 @@ setTimeout(() => {
  * Runs once on app boot. Safe to re-run, safe under concurrent boots.
  */
 export async function migrateWriteTaskArmColumns(): Promise<void> {
-  const db = getPrisma();
+  const db = getMigrationPrisma();
   try {
     await db.$executeRawUnsafe(`ALTER TABLE mitkadem_writer."WriteTask" ADD COLUMN IF NOT EXISTS "styleArm"   TEXT`);
     await db.$executeRawUnsafe(`ALTER TABLE mitkadem_writer."WriteTask" ADD COLUMN IF NOT EXISTS "topicArm"   TEXT`);
@@ -135,9 +131,15 @@ export async function migrateWriteTaskArmColumns(): Promise<void> {
   }
 }
 
-// Fire-and-forget on import; failure crashes the process before listen.
-migrateWriteTaskArmColumns().catch((e) => {
-  logger.fatal({ err: e?.message }, '[startup] arm migration failed — exiting');
+export const startupMigrations = (async () => {
+  await migrateHookHistoryTable();
+  await migrateWriteTaskArmColumns();
+})().finally(async () => {
+  await disconnectMigrationPrisma();
+});
+
+startupMigrations.catch((e) => {
+  logger.fatal({ err: e?.message }, '[startup] writer migrations failed — exiting');
   process.exit(1);
 });
 // === /premium-01/task4a ===

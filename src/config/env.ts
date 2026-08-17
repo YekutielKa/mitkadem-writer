@@ -9,6 +9,7 @@ const envSchema = z.object({
   DEV_ADMIN_SECRET: z.string().default(''),
   // Database
   DATABASE_URL_WRITER: z.string().url(),
+  WRITER_MIGRATION_DATABASE_URL: z.string().url(),
   // Redis (optional)
   REDIS_URL: z.string().optional(),
   // External services
