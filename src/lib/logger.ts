@@ -21,6 +21,7 @@ export const logger = pino({
       '*.DEV_ADMIN_SECRET',
       '*.DATABASE_URL',
       '*.DATABASE_URL_WRITER',
+      '*.WRITER_MIGRATION_DATABASE_URL',
     ],
     censor: '[REDACTED]',
   },
